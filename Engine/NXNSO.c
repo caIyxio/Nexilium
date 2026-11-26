@@ -416,6 +416,7 @@ bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
     if (addOverflowU64(loadBase, segments[0].memoryOffset, &entryPoint))
         return false;
 
+    memset(loadedImage, 0, sizeof(*loadedImage));
     loadedImage->loadAddress = mappedAddress;
     loadedImage->entryPoint = entryPoint;
     loadedImage->imageSize = mappedSize64;
@@ -423,6 +424,11 @@ bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
     loadedImage->rodataSize = segments[1].memorySize;
     loadedImage->dataSize = segments[2].memorySize;
     loadedImage->bssSize = bssSize;
+
+    if (!applyMOD0RelativeRelocations(
+            engine, loadBase, entryPoint, segments[0].memorySize, loadedImage))
+        return false;
+
     engine->cpu.pc = entryPoint;
     return true;
 }
