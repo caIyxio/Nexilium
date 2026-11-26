@@ -18,6 +18,11 @@ static uint32_t readU32LE(const uint8_t *bytes) {
            ((uint32_t)bytes[3] << 24);
 }
 
+static uint64_t readU64LE(const uint8_t *bytes) {
+    return (uint64_t)readU32LE(bytes) |
+           ((uint64_t)readU32LE(bytes + 4) << 32);
+}
+
 static bool rangesOverlap(uint64_t firstOffset, uint64_t firstSize,
                           uint64_t secondOffset, uint64_t secondSize) {
     if (firstSize == 0 || secondSize == 0) return false;
@@ -34,6 +39,9 @@ bool NXNCAParseSectionTable(const uint8_t *decryptedHeader,
 
     if (memcmp(decryptedHeader + 0x200, "NCA2", 4) != 0 &&
         memcmp(decryptedHeader + 0x200, "NCA3", 4) != 0)
+        return false;
+
+    if (readU64LE(decryptedHeader + 0x208) != ncaFileSize)
         return false;
 
     NXNCASectionLayout candidate;
