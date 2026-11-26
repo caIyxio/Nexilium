@@ -14,10 +14,9 @@ typedef struct {
     uint32_t startBlock;
     uint32_t endBlock;
     uint16_t fsHeaderVersion;
-    uint8_t fsType;
-    uint8_t hashType;
+    uint8_t partitionType;
+    uint8_t fileSystemType;
     uint8_t encryptionType;
-    uint8_t metadataHashType;
     uint64_t byteOffset;
     uint64_t byteSize;
 } NXNCASectionInfo;
