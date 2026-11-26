@@ -101,6 +101,7 @@ private struct FirmwareInstallerView: View {
     @AppStorage("system.firmwareNcaCount") private var firmwareNcaCount = 0
     @AppStorage("system.firmwareBytes") private var firmwareBytes = 0.0
     @AppStorage("system.systemMenuAssetsExtracted") private var systemMenuAssetsExtracted = false
+    @AppStorage("system.systemMenuRomFSExtracted") private var systemMenuRomFSExtracted = false
     @AppStorage("system.systemMenuExtractionIssue") private var systemMenuExtractionIssue = ""
     @AppStorage("system.prodKeysFilename") private var prodKeysFilename = ""
     @AppStorage("system.titleKeysFilename") private var titleKeysFilename = ""
@@ -164,8 +165,12 @@ private struct FirmwareInstallerView: View {
 
             Section("System Menu") {
                 LabeledContent(
-                    "qlaunch program files",
+                    "qlaunch ExeFS",
                     value: systemMenuAssetsExtracted ? "Extracted" : "Not extracted"
+                )
+                LabeledContent(
+                    "qlaunch RomFS",
+                    value: systemMenuRomFSExtracted ? "Extracted" : "Not extracted"
                 )
                 if !systemMenuExtractionIssue.isEmpty {
                     Text(systemMenuExtractionIssue)
@@ -325,9 +330,13 @@ private struct FirmwareInstallerView: View {
                         firmwareBytes = Double(summary.totalBytes)
                         firmwareImported = true
                         systemMenuAssetsExtracted = summary.systemMenuAssets != nil
+                        systemMenuRomFSExtracted = summary.systemMenuAssets?.romFSPath != nil
                         systemMenuExtractionIssue = summary.systemMenuExtractionIssue ?? ""
                         if let assets = summary.systemMenuAssets {
-                            statusMessage = "Validated \(summary.ncaCount) NCA headers and extracted qlaunch's main NSO (\(ByteCountFormatter.string(fromByteCount: Int64(assets.mainNSOBytes), countStyle: .file))) plus main.npdm. The Home Menu is not bootable yet."
+                            let romFSStatus = assets.romFSBytes.map {
+                                " and RomFS (\(ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file)))"
+                            } ?? ""
+                            statusMessage = "Validated \(summary.ncaCount) NCA headers and extracted qlaunch's main NSO (\(ByteCountFormatter.string(fromByteCount: Int64(assets.mainNSOBytes), countStyle: .file))), main.npdm\(romFSStatus). The Home Menu is not bootable yet."
                         } else {
                             statusMessage = "Validated \(summary.ncaCount) NCA headers, but qlaunch could not be extracted: \(summary.systemMenuExtractionIssue ?? "unknown reason")."
                         }
