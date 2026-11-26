@@ -164,6 +164,40 @@ static uint32_t createSession(Machine *machine, NXServiceKind service) {
     return 0;
 }
 
+static uint32_t createFilesystemSession(Machine *machine,
+                                            const char *mountName) {
+    if (!machine || !mountName) return 0;
+    bool mounted = false;
+    for (size_t i = 0; i < NX_VFS_MAX_MOUNTS; ++i) {
+        const NXVFSMount *mount = &machine->vfs.mounts[i];
+        if (mount->active && strcmp(mount->name, mountName) == 0) {
+            mounted = true;
+            break;
+        }
+    }
+    if (!mounted) return 0;
+
+    uint32_t handle = createSession(machine, NX_SERVICE_FILESYSTEM);
+    NXSessionHandle *session = findSession(machine, handle);
+    if (!session) return 0;
+    size_t length = strlen(mountName);
+    if (length > NX_VFS_MOUNT_NAME_MAX) {
+        memset(session, 0, sizeof(*session));
+        return 0;
+    }
+    memcpy(session->mountName, mountName, length + 1u);
+    return handle;
+}
+
+static uint32_t createFileSession(Machine *machine, const NXVFSFile *file) {
+    if (!machine || !file || !file->bytes) return 0;
+    uint32_t handle = createSession(machine, NX_SERVICE_FILE);
+    NXSessionHandle *session = findSession(machine, handle);
+    if (!session) return 0;
+    session->file = *file;
+    return handle;
+}
+
 static bool readGuestCString(CPU *cpu, uint64_t address,
                              char *destination, size_t capacity) {
     if (!destination || capacity < 2) return false;
@@ -239,6 +273,97 @@ static bool hipcRawDataOffset(const uint8_t *buffer, size_t *outOffset,
     *outOffset = offset;
     *outRawSize = rawWords * 4;
     return true;
+}
+
+static bool hipcGetBufferDescriptor(const uint8_t *buffer,
+                                      uint32_t bufferType, uint32_t index,
+                                      uint64_t *address, uint64_t *size) {
+    if (!buffer || !address || !size) return false;
+    const uint32_t header0 = readU32LE(buffer);
+    const uint32_t header1 = readU32LE(buffer + 4);
+    const size_t pointerCount = (header0 >> 16) & 0xFu;
+    const size_t sendCount = (header0 >> 20) & 0xFu;
+    const size_t receiveCount = (header0 >> 24) & 0xFu;
+    const size_t exchangeCount = (header0 >> 28) & 0xFu;
+
+    size_t offset = 8;
+    if ((header1 >> 31) != 0) {
+        const uint32_t special = readU32LE(buffer + offset);
+        offset += 4;
+        if ((special & 1u) != 0) offset += 8;
+        const size_t copyCount = (special >> 1) & 0xFu;
+        const size_t moveCount = (special >> 5) & 0xFu;
+        offset += (copyCount + moveCount) * 4u;
+    }
+    if (offset > 0x100) return false;
+
+    const size_t pointerOffset = offset;
+    const size_t sendOffset = pointerOffset + pointerCount * 8u;
+    const size_t receiveOffset = sendOffset + sendCount * 12u;
+    const size_t exchangeOffset = receiveOffset + receiveCount * 12u;
+    size_t descriptorOffset = 0;
+
+    if (bufferType == 0x9u) {
+        if (index >= pointerCount) return false;
+        descriptorOffset = pointerOffset + (size_t)index * 8u;
+        const uint32_t data0 = readU32LE(buffer + descriptorOffset);
+        const uint32_t data1 = readU32LE(buffer + descriptorOffset + 4u);
+        *size = (data0 >> 16) & 0xFFFFu;
+        *address = (uint64_t)data1 |
+                   ((uint64_t)((data0 >> 12) & 0xFu) << 32) |
+                   ((uint64_t)((data0 >> 6) & 0x7u) << 36);
+    } else if (bufferType == 0x19u) {
+        if (index >= sendCount) return false;
+        descriptorOffset = sendOffset + (size_t)index * 12u;
+        const uint32_t data0 = readU32LE(buffer + descriptorOffset);
+        const uint32_t data1 = readU32LE(buffer + descriptorOffset + 4u);
+        const uint32_t data2 = readU32LE(buffer + descriptorOffset + 8u);
+        *size = (uint64_t)data0 | ((uint64_t)((data2 >> 24) & 0xFu) << 32);
+        *address = (uint64_t)data1 |
+                   ((uint64_t)((data2 >> 28) & 0xFu) << 32) |
+                   ((uint64_t)((data2 >> 2) & 0x7u) << 36);
+    } else if (bufferType == 0x6u) {
+        if (index >= receiveCount) return false;
+        descriptorOffset = receiveOffset + (size_t)index * 12u;
+        const uint32_t data0 = readU32LE(buffer + descriptorOffset);
+        const uint32_t data1 = readU32LE(buffer + descriptorOffset + 4u);
+        const uint32_t data2 = readU32LE(buffer + descriptorOffset + 8u);
+        *size = (uint64_t)data0 | ((uint64_t)((data2 >> 24) & 0xFu) << 32);
+        *address = (uint64_t)data1 |
+                   ((uint64_t)((data2 >> 28) & 0xFu) << 32) |
+                   ((uint64_t)((data2 >> 2) & 0x7u) << 36);
+    } else {
+        (void)exchangeOffset;
+        return false;
+    }
+
+    return *size != 0 && *address <= UINT64_MAX - *size;
+}
+
+static bool readGuestPath(CPU *cpu, uint64_t address, uint64_t size,
+                          char *path, size_t capacity) {
+    if (!cpu || !path || capacity < 2 || size == 0 ||
+        size > capacity || size > SIZE_MAX)
+        return false;
+    const uint8_t *source = (const uint8_t *)mem_host_ptr(
+        cpu, address, (size_t)size, ACC_READ
+    );
+    if (!source) return false;
+
+    size_t length = 0;
+    while (length < (size_t)size && source[length] != 0) ++length;
+    if (length == (size_t)size || length >= capacity) return false;
+    memcpy(path, source, length);
+    path[length] = '\0';
+    return true;
+}
+
+static void writeCmifResponseData(uint8_t *buffer, uint32_t result,
+                                  uint32_t movedHandle,
+                                  const void *data, size_t dataSize) {
+    writeCmifResponse(buffer, result, movedHandle);
+    if (data && dataSize && dataSize <= 0xE0)
+        memcpy(buffer + 0x20, data, dataSize);
 }
 
 static void writeCmifResponse(uint8_t *buffer, uint32_t result,
