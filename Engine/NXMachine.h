@@ -40,7 +40,8 @@ typedef enum {
     NX_SERVICE_CONTENT_MANAGER,
     NX_SERVICE_LOADER,
     NX_SERVICE_FILESYSTEM,
-    NX_SERVICE_FILE
+    NX_SERVICE_FILE,
+    NX_SERVICE_DIRECTORY
 } NXServiceKind;
 
 typedef struct {
@@ -49,6 +50,9 @@ typedef struct {
     bool active;
     char mountName[NX_VFS_MOUNT_NAME_MAX + 1u];
     NXVFSFile file;
+    char directoryPath[0x302];
+    uint64_t directoryFilterFlags;
+    size_t directoryIndex;
 } NXSessionHandle;
 
 #define NX_MAX_SESSION_HANDLES 128
