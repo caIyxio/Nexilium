@@ -1,5 +1,6 @@
 #include "NXMachine.h"
 #include "NXPFS0.h"
+#include "Arm64/mmu.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
