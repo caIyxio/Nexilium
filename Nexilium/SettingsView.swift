@@ -1,6 +1,5 @@
 import SwiftUI
 import AppEntitlements
-import LucideSwift
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
     case graphics = "Graphics"
@@ -23,7 +22,8 @@ struct SettingsView: View {
         NavigationSplitView {
             List(SettingsCategory.allCases, selection: $selection) { category in
                 HStack(spacing: 12) {
-                    LucideIcon(icon(for: category), size: 19)
+                    Image(systemName: icon(for: category))
+                        .font(.system(size: 19, weight: .regular))
                         .frame(width: 24)
                     Text(category.rawValue)
                 }
@@ -49,13 +49,13 @@ struct SettingsView: View {
         .navigationSplitViewStyle(.balanced)
     }
 
-    private func icon(for category: SettingsCategory) -> LucideIconName {
+    private func icon(for category: SettingsCategory) -> String {
         switch category {
-        case .graphics: .monitor
-        case .controllers: .gamepad2
-        case .system: .cpu
-        case .miscellaneous: .slidersHorizontal
-        case .about: .info
+        case .graphics: "display"
+        case .controllers: "gamecontroller"
+        case .system: "cpu"
+        case .miscellaneous: "slider.horizontal.3"
+        case .about: "info.circle"
         }
     }
 }
