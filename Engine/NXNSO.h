@@ -21,6 +21,10 @@ typedef struct {
     uint64_t symbolCount;
     uint64_t stringTableAddress;
     uint64_t stringTableSize;
+    uint64_t relaTableAddress;
+    uint64_t relaTableSize;
+    uint64_t relTableAddress;
+    uint64_t relTableSize;
     uint32_t relativeRelocationCount;
     uint32_t symbolRelocationCount;
     uint32_t unsupportedRelocationCount;
@@ -32,11 +36,14 @@ typedef struct {
 typedef struct {
     NXLoadedNSO modules[NX_NSO_MAX_MODULES];
     size_t count;
+    bool pendingRelocationsResolved;
 } NXNSORegistry;
 
 void NXNSORegistryInit(NXNSORegistry *registry);
 bool NXNSORegistryRegister(NXNSORegistry *registry,
                            const NXLoadedNSO *module);
+bool NXNSORegistryResolvePending(NXEngine *engine,
+                                 NXNSORegistry *registry);
 
 bool NXEngineLoadNSOWithRegistry(NXEngine *engine, const uint8_t *fileBytes,
                                  size_t fileSize, uint64_t loadBase,
