@@ -672,9 +672,10 @@ static bool loadSegment(NXEngine *engine, const uint8_t *fileBytes,
     return ok;
 }
 
-bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
-                     size_t fileSize, uint64_t loadBase,
-                     NXLoadedNSO *loadedImage) {
+bool NXEngineLoadNSOWithRegistry(NXEngine *engine, const uint8_t *fileBytes,
+                                 size_t fileSize, uint64_t loadBase,
+                                 NXNSORegistry *registry,
+                                 NXLoadedNSO *loadedImage) {
     if (!engine || !engine->initialized || !fileBytes ||
         fileSize < NX_NSO_HEADER_SIZE || !loadedImage) return false;
     if (readU32LE(fileBytes) != NX_NSO_SIGNATURE) return false;
@@ -749,6 +750,7 @@ bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
 
     memset(loadedImage, 0, sizeof(*loadedImage));
     loadedImage->loadAddress = mappedAddress;
+    loadedImage->loadBase = loadBase;
     loadedImage->entryPoint = entryPoint;
     loadedImage->imageSize = mappedSize64;
     loadedImage->textSize = segments[0].memorySize;
@@ -757,9 +759,37 @@ bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
     loadedImage->bssSize = bssSize;
 
     if (!applyMOD0RelativeRelocations(
-            engine, loadBase, entryPoint, segments[0].memorySize, loadedImage))
+            engine, loadBase, entryPoint, segments[0].memorySize,
+            registry, loadedImage))
+        return false;
+
+    if (registry && !NXNSORegistryRegister(registry, loadedImage))
         return false;
 
     engine->cpu.pc = entryPoint;
     return true;
+}
+
+void NXNSORegistryInit(NXNSORegistry *registry) {
+    if (registry) memset(registry, 0, sizeof(*registry));
+}
+
+bool NXNSORegistryRegister(NXNSORegistry *registry,
+                           const NXLoadedNSO *module) {
+    if (!registry || !module || registry->count >= NX_NSO_MAX_MODULES)
+        return false;
+    for (size_t i = 0; i < registry->count; ++i) {
+        if (registry->modules[i].loadBase == module->loadBase)
+            return false;
+    }
+    registry->modules[registry->count++] = *module;
+    return true;
+}
+
+bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
+                     size_t fileSize, uint64_t loadBase,
+                     NXLoadedNSO *loadedImage) {
+    return NXEngineLoadNSOWithRegistry(
+        engine, fileBytes, fileSize, loadBase, NULL, loadedImage
+    );
 }
