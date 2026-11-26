@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   build:
+    timeout-minutes: 30
     # The arm64 macOS hosted pool has been failing to provision runners.
     # Use the Intel pool as a temporary workaround.
     runs-on: macos-15-intel
@@ -34,7 +35,12 @@ jobs:
       - name: Normalize app icon dimensions
         run: sips -z 1024 1024 Nexilium/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 
+      - name: Resolve Swift packages
+        timeout-minutes: 10
+        run: xcodebuild -resolvePackageDependencies -project Nexilium.xcodeproj -scheme Nexilium
+
       - name: Build for generic iOS device
+        timeout-minutes: 20
         run: |
           xcodebuild \
             -project Nexilium.xcodeproj \
