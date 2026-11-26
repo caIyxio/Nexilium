@@ -23,6 +23,7 @@ enum NexiliumGuestProcessError: LocalizedError {
 final class NexiliumGuestProcess {
     private var engine = NXEngine()
     private var initialized = false
+    private var mountedFileSystemImages: [Data] = []
     private(set) var preparedProcess: NXPreparedProcess?
 
     init() throws {
@@ -73,14 +74,36 @@ final class NexiliumGuestProcess {
     ) throws {
         let mainURL = storageDirectory.appendingPathComponent(assets.mainNSOPath)
         let npdmURL = storageDirectory.appendingPathComponent(assets.npdmPath)
+        let romFSURL = assets.romFSPath.map {
+            storageDirectory.appendingPathComponent($0)
+        }
         let image = try NCAProgramImageReader.loadExtracted(
             mainNSOURL: mainURL,
-            npdmURL: npdmURL
+            npdmURL: npdmURL,
+            romFSURL: romFSURL
         )
         guard image.metadata.titleID == assets.titleID,
               image.metadata.titleID == 0x0100000000001000 else {
             throw NexiliumGuestProcessError.invalidSystemMenuAssets
         }
+        if let romFS = image.romFS {
+            let mounted = romFS.withUnsafeBytes { rawBuffer -> Bool in
+                guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                    return false
+                }
+                return NXEngineMountRomFS(
+                    &engine,
+                    "romfs",
+                    bytes,
+                    romFS.count
+                )
+            }
+            guard mounted else {
+                throw NexiliumGuestProcessError.invalidSystemMenuAssets
+            }
+            mountedFileSystemImages.append(romFS)
+        }
+
         try load(image, at: loadBase)
     }
 
