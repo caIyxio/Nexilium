@@ -30,6 +30,9 @@ typedef struct Machine {
     size_t regionCount;
     NXPendingException pendingException;
     uint64_t timerTicks;
+    uint64_t heapBase;
+    uint64_t heapSize;
+    bool processExited;
 } Machine;
 
 typedef struct {
