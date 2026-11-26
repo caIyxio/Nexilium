@@ -100,6 +100,8 @@ private struct FirmwareInstallerView: View {
     @AppStorage("system.firmwareFilename") private var firmwareFilename = ""
     @AppStorage("system.firmwareNcaCount") private var firmwareNcaCount = 0
     @AppStorage("system.firmwareBytes") private var firmwareBytes = 0.0
+    @AppStorage("system.systemMenuAssetsExtracted") private var systemMenuAssetsExtracted = false
+    @AppStorage("system.systemMenuExtractionIssue") private var systemMenuExtractionIssue = ""
     @AppStorage("system.prodKeysFilename") private var prodKeysFilename = ""
     @AppStorage("system.titleKeysFilename") private var titleKeysFilename = ""
     @State private var importTarget: ImportTarget = .firmware
@@ -160,6 +162,18 @@ private struct FirmwareInstallerView: View {
                 }
             }
 
+            Section("System Menu") {
+                LabeledContent(
+                    "qlaunch program files",
+                    value: systemMenuAssetsExtracted ? "Extracted" : "Not extracted"
+                )
+                if !systemMenuExtractionIssue.isEmpty {
+                    Text(systemMenuExtractionIssue)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Keys") {
                 LabeledContent("prod.keys", value: prodKeysImported ? "Imported" : "Not imported")
                 importButtons(for: .prodKeys)
@@ -169,7 +183,7 @@ private struct FirmwareInstallerView: View {
             }
 
             Section {
-                Text("Nexilium extracts NCA files and validates their encrypted headers. Firmware filesystem sections are not mounted until the section-decryption and filesystem layers are connected. prod.keys is checked before use; title.keys is optional for firmware headers.")
+                Text("Nexilium validates NCA headers and can extract qlaunch's main NSO and NPDM when the required standard keys are available. It does not yet boot the Home Menu: dynamic linking, Horizon services, and GPU presentation are still incomplete. title.keys is not yet used for section decryption.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -310,7 +324,13 @@ private struct FirmwareInstallerView: View {
                         firmwareNcaCount = summary.ncaCount
                         firmwareBytes = Double(summary.totalBytes)
                         firmwareImported = true
-                        statusMessage = "Validated \(summary.ncaCount) NCA headers, including \(summary.metadataNcaCount) metadata archives. Firmware content is prepared for the runtime."
+                        systemMenuAssetsExtracted = summary.systemMenuAssets != nil
+                        systemMenuExtractionIssue = summary.systemMenuExtractionIssue ?? ""
+                        if let assets = summary.systemMenuAssets {
+                            statusMessage = "Validated \(summary.ncaCount) NCA headers and extracted qlaunch's main NSO (\(ByteCountFormatter.string(fromByteCount: Int64(assets.mainNSOBytes), countStyle: .file))) plus main.npdm. The Home Menu is not bootable yet."
+                        } else {
+                            statusMessage = "Validated \(summary.ncaCount) NCA headers, but qlaunch could not be extracted: \(summary.systemMenuExtractionIssue ?? "unknown reason")."
+                        }
                         isInstallingFirmware = false
                     } catch {
                         firmwareImported = false
