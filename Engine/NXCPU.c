@@ -137,13 +137,59 @@ int NXCPUSelfTest(void) {
                 responseMagic == UINT32_C(0x4F434653) &&
                 responseResult == 0;
     }
+
+    /* sm:GetServiceHandle("set:sys") must return a moved service handle. */
+    bool serviceOK = hipc != NULL;
+    uint32_t settingsHandle = 0;
+    if (serviceOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4;
+        uint32_t header1 = 6;
+        memcpy(hipc, &header0, sizeof(header0));
+        memcpy(hipc + 4, &header1, sizeof(header1));
+        const uint32_t getServiceRequest[] = {
+            UINT32_C(0x49434653), 0, 1, 0
+        };
+        memcpy(hipc + 0x10, getServiceRequest, sizeof(getServiceRequest));
+        memcpy(hipc + 0x20, "set:sys", 7);
+
+        uint32_t getServiceResult = NXHorizonSendSyncRequest(&svcEngine, smHandle);
+        uint32_t responseMagic = 0, responseResult = UINT32_MAX;
+        memcpy(&responseMagic, hipc + 0x10, sizeof(responseMagic));
+        memcpy(&responseResult, hipc + 0x18, sizeof(responseResult));
+        memcpy(&settingsHandle, hipc + 0x0C, sizeof(settingsHandle));
+        serviceOK = getServiceResult == 0 &&
+                    responseMagic == UINT32_C(0x4F434653) &&
+                    responseResult == 0 && settingsHandle != 0;
+    }
+
+    /* Unknown service names must be rejected without creating a handle. */
+    if (serviceOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4;
+        uint32_t header1 = 6;
+        memcpy(hipc, &header0, sizeof(header0));
+        memcpy(hipc + 4, &header1, sizeof(header1));
+        const uint32_t getServiceRequest[] = {
+            UINT32_C(0x49434653), 0, 1, 0
+        };
+        memcpy(hipc + 0x10, getServiceRequest, sizeof(getServiceRequest));
+        memcpy(hipc + 0x20, "unknown", 7);
+        uint32_t unknownResult = NXHorizonSendSyncRequest(&svcEngine, smHandle);
+        uint32_t responseResult = UINT32_MAX;
+        memcpy(&responseResult, hipc + 0x18, sizeof(responseResult));
+        serviceOK = unknownResult == UINT32_C(0x0000F601) &&
+                    responseResult == UINT32_C(0x0000F601);
+    }
+
+    NXHorizonCloseHandle(&svcEngine, settingsHandle);
     NXHorizonCloseHandle(&svcEngine, smHandle);
-    if (!svcOK || !ipcOK) {
-        fprintf(stderr, "Horizon self-test failed: svc=%d ipc=%d result=%d handle=%u\\n",
-                svcOK, ipcOK, (int)svcResult, smHandle);
+    if (!svcOK || !ipcOK || !serviceOK) {
+        fprintf(stderr, "Horizon self-test failed: svc=%d ipc=%d service=%d result=%d handle=%u\\n",
+                svcOK, ipcOK, serviceOK, (int)svcResult, smHandle);
     }
     NXEngineDestroy(&svcEngine);
-    if (!svcOK || !ipcOK) return 0;
+    if (!svcOK || !ipcOK || !serviceOK) return 0;
 
     /* Validate PFS0 directory bounds, names, and file data views. */
     uint8_t pfs[0x36] = {0};
