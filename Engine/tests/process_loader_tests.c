@@ -231,7 +231,9 @@ static void testMOD0RELRRelativeRelocation(void) {
 
 static void testUnsupportedMOD0RelocationIsReported(void) {
     uint8_t nso[0x300];
-    buildRelocatableNSO(nso,sizeof(nso),257u); /* R_AARCH64_ABS64 needs symbol lookup. */
+    buildRelocatableNSO(nso,sizeof(nso),257u);
+    /* A nonzero symbol index with no DT_SYMTAB is an unresolved import. */
+    put64(nso+0x100+0x128,(UINT64_C(1)<<32)|257u);
 
     NXEngine engine;
     CHECK(NXEngineInit(&engine));
