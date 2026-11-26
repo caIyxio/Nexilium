@@ -264,6 +264,10 @@ private struct MiscSettingsView: View {
 }
 
 private struct AboutView: View {
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+
     var body: some View {
         Form {
             Section {
@@ -286,11 +290,12 @@ private struct AboutView: View {
             }
 
             Section("Version") {
-                LabeledContent("App version", value: "Early development")
+                LabeledContent("App version", value: appVersion)
                 LabeledContent("Minimum iOS", value: "18.0")
             }
 
             Section("Project") {
+                LabeledContent("Developer", value: "Silicon Team")
                 Link(destination: URL(string: "https://github.com/caIyxio/Nexilium")!) {
                     Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
                 }
