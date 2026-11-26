@@ -83,6 +83,231 @@ static bool decodeLZ4Block(const uint8_t *source, size_t sourceSize,
     return input == sourceSize && output == destinationSize;
 }
 
+static uint64_t readU64LE(const uint8_t *bytes) {
+    return (uint64_t)readU32LE(bytes) |
+           ((uint64_t)readU32LE(bytes + 4) << 32);
+}
+
+static bool addSignedOffset(uint64_t base, int64_t offset,
+                            uint64_t *result) {
+    if (!result) return false;
+    if (offset >= 0)
+        return !addOverflowU64(base, (uint64_t)offset, result);
+    const uint64_t magnitude = (uint64_t)(-(offset + 1)) + 1u;
+    if (base < magnitude) return false;
+    *result = base - magnitude;
+    return true;
+}
+
+static bool addressInImage(const NXLoadedNSO *image,
+                           uint64_t address, size_t size) {
+    if (!image || address < image->loadAddress ||
+        address > UINT64_MAX - size)
+        return false;
+    const uint64_t offset = address - image->loadAddress;
+    return offset <= image->imageSize &&
+           (uint64_t)size <= image->imageSize - offset;
+}
+
+static bool readGuestU64(NXEngine *engine, uint64_t address,
+                         uint64_t *value) {
+    if (!engine || !value) return false;
+    const uint8_t *bytes = (const uint8_t *)mem_host_ptr(
+        &engine->cpu, address, sizeof(uint64_t), ACC_READ
+    );
+    if (!bytes) return false;
+    *value = readU64LE(bytes);
+    return true;
+}
+
+static bool writeGuestU64(NXEngine *engine, uint64_t address,
+                          uint64_t value) {
+    if (!engine) return false;
+    uint8_t *bytes = (uint8_t *)mem_host_ptr(
+        &engine->cpu, address, sizeof(uint64_t), ACC_WRITE
+    );
+    if (!bytes) return false;
+    for (size_t i = 0; i < 8; ++i)
+        bytes[i] = (uint8_t)(value >> (i * 8));
+    return true;
+}
+
+static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
+                           const NXLoadedNSO *image,
+                           uint64_t tableAddress, uint64_t tableSize,
+                           NXLoadedNSO *stats) {
+    if (tableSize == 0) return true;
+    if (tableSize % 24u != 0 || tableSize > SIZE_MAX ||
+        !addressInImage(image, tableAddress, (size_t)tableSize))
+        return false;
+
+    const uint64_t count = tableSize / 24u;
+    for (uint64_t i = 0; i < count; ++i) {
+        const uint64_t entryAddress = tableAddress + i * 24u;
+        const uint8_t *entry = (const uint8_t *)mem_host_ptr(
+            &engine->cpu, entryAddress, 24, ACC_READ
+        );
+        if (!entry) return false;
+
+        const uint64_t targetOffset = readU64LE(entry);
+        const uint64_t info = readU64LE(entry + 8);
+        const int64_t addend = (int64_t)readU64LE(entry + 16);
+        const uint32_t type = (uint32_t)info;
+        const uint32_t symbolIndex = (uint32_t)(info >> 32);
+
+        if (type == 0) continue; /* R_AARCH64_NONE */
+        if (type != 1027u || symbolIndex != 0) {
+            ++stats->unsupportedRelocationCount;
+            continue;
+        }
+
+        uint64_t targetAddress = 0;
+        uint64_t relocatedValue = 0;
+        if (addOverflowU64(loadBase, targetOffset, &targetAddress) ||
+            !addressInImage(image, targetAddress, sizeof(uint64_t)) ||
+            !addSignedOffset(loadBase, addend, &relocatedValue) ||
+            !writeGuestU64(engine, targetAddress, relocatedValue))
+            return false;
+        ++stats->relativeRelocationCount;
+    }
+    return true;
+}
+
+static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
+                          const NXLoadedNSO *image,
+                          uint64_t tableAddress, uint64_t tableSize,
+                          NXLoadedNSO *stats) {
+    if (tableSize == 0) return true;
+    if (tableSize % 16u != 0 || tableSize > SIZE_MAX ||
+        !addressInImage(image, tableAddress, (size_t)tableSize))
+        return false;
+
+    const uint64_t count = tableSize / 16u;
+    for (uint64_t i = 0; i < count; ++i) {
+        const uint64_t entryAddress = tableAddress + i * 16u;
+        const uint8_t *entry = (const uint8_t *)mem_host_ptr(
+            &engine->cpu, entryAddress, 16, ACC_READ
+        );
+        if (!entry) return false;
+
+        const uint64_t targetOffset = readU64LE(entry);
+        const uint64_t info = readU64LE(entry + 8);
+        const uint32_t type = (uint32_t)info;
+        const uint32_t symbolIndex = (uint32_t)(info >> 32);
+        if (type == 0) continue;
+        if (type != 1027u || symbolIndex != 0) {
+            ++stats->unsupportedRelocationCount;
+            continue;
+        }
+
+        uint64_t targetAddress = 0;
+        uint64_t implicitAddend = 0;
+        uint64_t relocatedValue = 0;
+        if (addOverflowU64(loadBase, targetOffset, &targetAddress) ||
+            !addressInImage(image, targetAddress, sizeof(uint64_t)) ||
+            !readGuestU64(engine, targetAddress, &implicitAddend) ||
+            addOverflowU64(loadBase, implicitAddend, &relocatedValue) ||
+            !writeGuestU64(engine, targetAddress, relocatedValue))
+            return false;
+        ++stats->relativeRelocationCount;
+    }
+    return true;
+}
+
+/*
+ * The MOD0 pointer is stored at +4 in the loaded text image. This pass applies
+ * only symbol-free R_AARCH64_RELATIVE relocations; rtld-style symbol lookup
+ * (ABS64/GLOB_DAT/JUMP_SLOT) remains a separate, unimplemented stage.
+ */
+static bool applyMOD0RelativeRelocations(NXEngine *engine,
+                                         uint64_t loadBase,
+                                         uint64_t textAddress,
+                                         uint32_t textSize,
+                                         NXLoadedNSO *image) {
+    if (!engine || !image || textSize < 8u) return true;
+
+    uint64_t pointerAddress = 0;
+    if (addOverflowU64(textAddress, 4u, &pointerAddress)) return false;
+    const uint8_t *pointerBytes = (const uint8_t *)mem_host_ptr(
+        &engine->cpu, pointerAddress, 4, ACC_READ
+    );
+    if (!pointerBytes) return false;
+
+    const uint32_t mod0Offset = readU32LE(pointerBytes);
+    if (mod0Offset == 0 || mod0Offset > textSize ||
+        textSize - mod0Offset < 0x1Cu)
+        return true;
+
+    uint64_t mod0Address = 0;
+    if (addOverflowU64(textAddress, mod0Offset, &mod0Address))
+        return false;
+    const uint8_t *mod0 = (const uint8_t *)mem_host_ptr(
+        &engine->cpu, mod0Address, 0x1Cu, ACC_READ
+    );
+    if (!mod0 || readU32LE(mod0) != UINT32_C(0x30444F4D))
+        return true;
+
+    image->hasModuleHeader = true;
+    image->moduleHeaderAddress = mod0Address;
+    const int32_t dynamicOffset = (int32_t)readU32LE(mod0 + 4);
+    uint64_t dynamicAddress = 0;
+    if (!addSignedOffset(mod0Address, dynamicOffset, &dynamicAddress) ||
+        !addressInImage(image, dynamicAddress, 16))
+        return false;
+    image->dynamicAddress = dynamicAddress;
+
+    uint64_t relaOffset = 0, relaSize = 0, relaEntrySize = 0;
+    uint64_t relOffset = 0, relSize = 0, relEntrySize = 0;
+    const uint64_t maxEntries = image->imageSize / 16u;
+    bool terminated = false;
+
+    for (uint64_t i = 0; i < maxEntries; ++i) {
+        uint64_t entryAddress = 0;
+        if (addOverflowU64(dynamicAddress, i * 16u, &entryAddress) ||
+            !addressInImage(image, entryAddress, 16))
+            return false;
+        const uint8_t *entry = (const uint8_t *)mem_host_ptr(
+            &engine->cpu, entryAddress, 16, ACC_READ
+        );
+        if (!entry) return false;
+
+        const int64_t tag = (int64_t)readU64LE(entry);
+        const uint64_t value = readU64LE(entry + 8);
+        if (tag == 0) {
+            terminated = true;
+            break;
+        }
+        switch (tag) {
+            case 7:  relaOffset = value; break; /* DT_RELA */
+            case 8:  relaSize = value; break;   /* DT_RELASZ */
+            case 9:  relaEntrySize = value; break; /* DT_RELAENT */
+            case 17: relOffset = value; break;  /* DT_REL */
+            case 18: relSize = value; break;    /* DT_RELSZ */
+            case 19: relEntrySize = value; break; /* DT_RELENT */
+            default: break;
+        }
+    }
+    if (!terminated) return false;
+
+    if (relaSize != 0) {
+        uint64_t tableAddress = 0;
+        if (relaEntrySize != 24u ||
+            addOverflowU64(loadBase, relaOffset, &tableAddress) ||
+            !applyRelaTable(engine, loadBase, image,
+                            tableAddress, relaSize, image))
+            return false;
+    }
+    if (relSize != 0) {
+        uint64_t tableAddress = 0;
+        if (relEntrySize != 16u ||
+            addOverflowU64(loadBase, relOffset, &tableAddress) ||
+            !applyRelTable(engine, loadBase, image,
+                           tableAddress, relSize, image))
+            return false;
+    }
+    return true;
+}
+
 static bool loadSegment(NXEngine *engine, const uint8_t *fileBytes,
                         size_t fileSize, const NXNSOSegment *segment,
                         uint64_t loadBase) {
