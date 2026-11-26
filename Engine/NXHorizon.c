@@ -520,6 +520,13 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
             default:
                 break;
         }
+    } else if (session->service == NX_SERVICE_SETTINGS) {
+        if (methodID == 23 && rawSize >= 16) { /* GetColorSetId: Basic White. */
+            const int32_t colorSetID = 0;
+            memcpy(extraData, &colorSetID, sizeof(colorSetID));
+            extraDataSize = sizeof(colorSetID);
+            result = NX_RESULT_SUCCESS;
+        }
     } else if (session->service == NX_SERVICE_FSP) {
         if (methodID == 2 && rawSize >= 16) {
             /* OpenDataFileSystemByCurrentProcess -> this process's read-only RomFS. */
