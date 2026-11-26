@@ -40,11 +40,12 @@ private struct HomeView: View {
     @Binding var selectedTab: Int
     @AppStorage("system.firmwareImported") private var firmwareImported = false
     @AppStorage("system.prodKeysImported") private var prodKeysImported = false
+    @AppStorage("system.titleKeysImported") private var titleKeysImported = false
     @State private var showFirmwareInstaller = false
     @State private var showSystemMenu = false
 
     private var systemMenuReady: Bool {
-        firmwareImported && prodKeysImported
+        firmwareImported && prodKeysImported && titleKeysImported
     }
 
     var body: some View {
@@ -96,10 +97,13 @@ private struct FirmwareInstallerView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("system.firmwareImported") private var firmwareImported = false
     @AppStorage("system.prodKeysImported") private var prodKeysImported = false
+    @AppStorage("system.titleKeysImported") private var titleKeysImported = false
     @AppStorage("system.firmwareFilename") private var firmwareFilename = ""
     @AppStorage("system.prodKeysFilename") private var prodKeysFilename = ""
+    @AppStorage("system.titleKeysFilename") private var titleKeysFilename = ""
     @State private var importingFirmware = false
     @State private var importingKeys = false
+    @State private var importingTitleKeys = false
     @State private var errorMessage: String?
 
     private var storageDirectory: URL {
@@ -118,17 +122,24 @@ private struct FirmwareInstallerView: View {
                 }
             }
 
-            Section("Product keys") {
+            Section("Keys") {
                 LabeledContent("prod.keys", value: prodKeysImported ? "Imported" : "Not imported")
                 Button {
                     importingKeys = true
                 } label: {
                     Label(prodKeysImported ? "Replace prod.keys" : "Choose prod.keys", systemImage: "key")
                 }
+
+                LabeledContent("title.keys", value: titleKeysImported ? "Imported" : "Not imported")
+                Button {
+                    importingTitleKeys = true
+                } label: {
+                    Label(titleKeysImported ? "Replace title.keys" : "Choose title.keys", systemImage: "key.fill")
+                }
             }
 
             Section {
-                Text("Select firmware and keys dumped from a Nintendo Switch you own. Nexilium imports the files here; firmware extraction and system-menu emulation are not implemented yet.")
+                Text("Import a firmware .zip archive and both key files. Nexilium currently stores these files locally; firmware parsing, validation and system emulation are not implemented yet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -150,10 +161,10 @@ private struct FirmwareInstallerView: View {
         }
         .fileImporter(
             isPresented: $importingFirmware,
-            allowedContentTypes: [.zip, .data],
+            allowedContentTypes: [.zip],
             allowsMultipleSelection: false
         ) { result in
-            handleImport(result, expectedExtension: nil, destinationName: "firmware-package") { name in
+            handleImport(result, expectedExtension: "zip", destinationName: "firmware-package.zip") { name in
                 firmwareFilename = name
                 firmwareImported = true
             }
@@ -163,8 +174,19 @@ private struct FirmwareInstallerView: View {
             allowedContentTypes: [.plainText, .data],
             allowsMultipleSelection: false
         ) { result in
-            handleImport(result, expectedExtension: "keys", destinationName: "prod.keys") { _ in
+            handleImport(result, expectedExtension: "keys", destinationName: "prod.keys") { name in
+                prodKeysFilename = name
                 prodKeysImported = true
+            }
+        }
+        .fileImporter(
+            isPresented: $importingTitleKeys,
+            allowedContentTypes: [.plainText, .data],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result, expectedExtension: "keys", destinationName: "title.keys") { name in
+                titleKeysFilename = name
+                titleKeysImported = true
             }
         }
     }
@@ -178,7 +200,7 @@ private struct FirmwareInstallerView: View {
         do {
             guard let sourceURL = try result.get().first else { return }
             if let expectedExtension, sourceURL.pathExtension.lowercased() != expectedExtension {
-                errorMessage = "Please select a file named prod.keys."
+                errorMessage = "Please select a file named \\(destinationName)."
                 return
             }
 
