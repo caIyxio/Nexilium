@@ -40,6 +40,13 @@ typedef struct {
     uint32_t mountIndex;
 } NXVFSFile;
 
+typedef struct {
+    const char *name;
+    size_t nameLength;
+    bool isDirectory;
+    size_t size;
+} NXVFSDirectoryItem;
+
 /* All mounted images are borrowed; callers must keep them alive while mounted. */
 void NXVFSInit(NXVFS *vfs);
 bool NXVFSMountRomFS(NXVFS *vfs, const char *name,
@@ -51,5 +58,8 @@ bool NXVFSOpenFile(const NXVFS *vfs, const char *mountName,
 bool NXVFSReadFile(const NXVFSFile *file, uint64_t offset,
                    void *destination, size_t requested,
                    size_t *bytesRead);
+bool NXVFSReadDirectory(const NXVFS *vfs, const char *mountName,
+                        const char *path, size_t index,
+                        NXVFSDirectoryItem *item);
 
 #endif
