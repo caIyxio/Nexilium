@@ -1,7 +1,8 @@
 import SwiftUI
 import AppEntitlements
+import LucideSwift
 
-private enum SettingsCategory: String, CaseIterable, Identifiable {
+enum SettingsCategory: String, CaseIterable, Identifiable {
     case graphics = "Graphics"
     case controllers = "Controllers"
     case system = "System"
@@ -12,13 +13,21 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @Environment(\\.dismiss) private var dismiss
-    @State private var selection: SettingsCategory? = .graphics
+    @State private var selection: SettingsCategory?
+
+    init(initialSelection: SettingsCategory = .graphics) {
+        _selection = State(initialValue: initialSelection)
+    }
 
     var body: some View {
         NavigationSplitView {
             List(SettingsCategory.allCases, selection: $selection) { category in
-                Label(category.rawValue, systemImage: icon(for: category))
-                    .tag(category)
+                HStack(spacing: 12) {
+                    LucideIcon(icon(for: category), size: 19)
+                        .frame(width: 24)
+                    Text(category.rawValue)
+                }
+                .tag(category)
             }
             .navigationTitle("System Settings")
             .toolbar {
@@ -40,13 +49,13 @@ struct SettingsView: View {
         .navigationSplitViewStyle(.balanced)
     }
 
-    private func icon(for category: SettingsCategory) -> String {
+    private func icon(for category: SettingsCategory) -> LucideIconName {
         switch category {
-        case .graphics: "monitor"
-        case .controllers: "gamecontroller"
-        case .system: "cpu"
-        case .miscellaneous: "sliders"
-        case .about: "info"
+        case .graphics: .monitor
+        case .controllers: .gamepad2
+        case .system: .cpu
+        case .miscellaneous: .slidersHorizontal
+        case .about: .info
         }
     }
 }
