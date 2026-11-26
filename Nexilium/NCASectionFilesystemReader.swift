@@ -55,6 +55,7 @@ enum NCASectionFilesystemReader {
         )
 
         var extracted: Data?
+        var oversizedFile = false
         let parsed = image.withUnsafeBytes { rawBuffer -> Bool in
             guard let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
                 return false
@@ -73,6 +74,7 @@ enum NCASectionFilesystemReader {
                 return false
             }
             guard file.size <= Int(maximumExtractedFileSize) else {
+                oversizedFile = true
                 return false
             }
 
@@ -89,6 +91,9 @@ enum NCASectionFilesystemReader {
                 }
                 var view = NXPFS0View()
                 return NXEngineOpenPFS0(baseAddress, image.count, &view)
+            }
+            if oversizedFile {
+                throw NCASectionFilesystemError.fileTooLarge(name)
             }
             if structurallyValid {
                 throw NCASectionFilesystemError.fileNotFound(name)
