@@ -99,6 +99,7 @@ static void buildIVFC(uint8_t *image) {
 static void buildDecryptedNCA(uint8_t *nca) {
     memset(nca, 0, NCA_IMAGE_SIZE);
     memcpy(nca + 0x200, "NCA3", 4);
+    put32(nca + 0x208, NCA_IMAGE_SIZE);
 
     /* One plaintext RomFS section spanning media blocks 6 through 8. */
     put32(nca + 0x240, 6);
