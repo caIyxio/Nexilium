@@ -42,10 +42,12 @@ private struct HomeView: View {
     @AppStorage("system.prodKeysImported") private var prodKeysImported = false
     @AppStorage("system.titleKeysImported") private var titleKeysImported = false
     @State private var showFirmwareInstaller = false
-    @State private var showSystemMenu = false
 
+    // The mock ConsoleHomeView is deliberately not exposed as a Switch System Menu.
+    // Enable this action only when the real HOS boot pipeline is connected.
     private var systemMenuReady: Bool {
-        firmwareImported && prodKeysImported && titleKeysImported
+        firmwareImported && prodKeysImported && titleKeysImported &&
+        NexiliumEngine.systemMenuBootSupported
     }
 
     var body: some View {
@@ -67,9 +69,7 @@ private struct HomeView: View {
                             Label("Install Nintendo Switch firmware", systemImage: "square.and.arrow.down")
                         }
 
-                        Button {
-                            showSystemMenu = true
-                        } label: {
+                        Button {} label: {
                             Label("Launch System Menu", systemImage: "play")
                         }
                         .disabled(!systemMenuReady)
@@ -87,23 +87,26 @@ private struct HomeView: View {
                     FirmwareInstallerView()
                 }
             }
-            .fullScreenCover(isPresented: $showSystemMenu) {
-                SystemMenuView()
-            }
+
     }
 }
 
+@MainActor
 private struct FirmwareInstallerView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("system.firmwareImported") private var firmwareImported = false
     @AppStorage("system.prodKeysImported") private var prodKeysImported = false
     @AppStorage("system.titleKeysImported") private var titleKeysImported = false
     @AppStorage("system.firmwareFilename") private var firmwareFilename = ""
+    @AppStorage("system.firmwareNcaCount") private var firmwareNcaCount = 0
+    @AppStorage("system.firmwareBytes") private var firmwareBytes = 0.0
     @AppStorage("system.prodKeysFilename") private var prodKeysFilename = ""
     @AppStorage("system.titleKeysFilename") private var titleKeysFilename = ""
     @State private var importTarget: ImportTarget = .firmware
     @State private var pickerMode: PickerMode?
     @State private var errorMessage: String?
+    @State private var statusMessage: String?
+    @State private var isInstallingFirmware = false
 
     private enum ImportTarget {
         case firmware, prodKeys, titleKeys
@@ -138,8 +141,23 @@ private struct FirmwareInstallerView: View {
     var body: some View {
         Form {
             Section("Nintendo Switch firmware") {
-                LabeledContent("Firmware package", value: firmwareImported ? "Imported: " + firmwareFilename : "Not imported")
-                importButtons(for: .firmware)
+                LabeledContent(
+                    "Installed content",
+                    value: firmwareImported
+                        ? "\(firmwareNcaCount) NCA files · \(ByteCountFormatter.string(fromByteCount: Int64(firmwareBytes), countStyle: .file))"
+                        : "Not installed"
+                )
+                if isInstallingFirmware {
+                    ProgressView("Installing firmware…")
+                } else {
+                    importButtons(for: .firmware)
+                }
+                if firmwareImported {
+                    Text(firmwareFilename)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
 
             Section("Keys") {
@@ -151,9 +169,17 @@ private struct FirmwareInstallerView: View {
             }
 
             Section {
-                Text("Choose a file or a folder containing it. Firmware must be a .zip file; key files must be named prod.keys and title.keys. Nexilium currently stores selected files locally; firmware parsing and emulation are not implemented yet.")
+                Text("Firmware ZIPs are installed into Nexilium’s app storage as NCA content. prod.keys is checked for a valid header key and master-key entries before it is accepted. title.keys is checked separately.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            }
+
+            if let statusMessage {
+                Section {
+                    Text(statusMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if let errorMessage {
@@ -201,18 +227,22 @@ private struct FirmwareInstallerView: View {
         Button {
             importTarget = target
             errorMessage = nil
+            statusMessage = nil
             pickerMode = .file
         } label: {
             Label("Choose file", systemImage: "doc")
         }
+        .disabled(isInstallingFirmware)
 
         Button {
             importTarget = target
             errorMessage = nil
+            statusMessage = nil
             pickerMode = .folder
         } label: {
             Label("Choose folder", systemImage: "folder")
         }
+        .disabled(isInstallingFirmware)
     }
 
     private func handleImport(_ selectedURL: URL, isCopiedIntoApp: Bool) {
@@ -259,14 +289,48 @@ private struct FirmwareInstallerView: View {
 
             switch importTarget {
             case .firmware:
-                firmwareFilename = isCopiedIntoApp ? sourceURL.lastPathComponent : "firmware-package.zip"
-                firmwareImported = true
+                let archiveURL = storageDirectory.appendingPathComponent("firmware-package.zip")
+                let rootDirectory = storageDirectory
+                let selectedFilename = isCopiedIntoApp ? sourceURL.lastPathComponent : "firmware-package.zip"
+                firmwareImported = false
+                isInstallingFirmware = true
+                statusMessage = "Reading firmware archive and extracting NCA content…"
+
+                Task {
+                    do {
+                        let summary = try await Task.detached(priority: .userInitiated) {
+                            try FirmwarePackageInstaller.install(
+                                archiveURL: archiveURL,
+                                storageDirectory: rootDirectory
+                            )
+                        }.value
+                        firmwareFilename = selectedFilename
+                        firmwareNcaCount = summary.ncaCount
+                        firmwareBytes = Double(summary.totalBytes)
+                        firmwareImported = true
+                        statusMessage = "Installed \(summary.ncaCount) NCA files, including \(summary.metadataNcaCount) content metadata archives."
+                        isInstallingFirmware = false
+                    } catch {
+                        firmwareImported = false
+                        statusMessage = nil
+                        errorMessage = error.localizedDescription
+                        isInstallingFirmware = false
+                    }
+                }
+
             case .prodKeys:
+                let keysURL = storageDirectory.appendingPathComponent("prod.keys")
+                let keyCount = try FirmwarePackageInstaller.validateProductionKeys(at: keysURL)
                 prodKeysFilename = "prod.keys"
                 prodKeysImported = true
+                statusMessage = "Validated \(keyCount) production-key entries."
+
             case .titleKeys:
+                let keysURL = storageDirectory.appendingPathComponent("title.keys")
+                let keyCount = try FirmwarePackageInstaller.validateTitleKeys(at: keysURL)
                 titleKeysFilename = "title.keys"
                 titleKeysImported = true
+                statusMessage = "Validated \(keyCount) title-key entries."
             }
             errorMessage = nil
         } catch {
