@@ -123,8 +123,8 @@ static void testDecryptedNCASectionToRomFSFile(void) {
     CHECK(ncaLayout.sectionCount == 1);
     CHECK(NXNCAGetSectionInfo(&ncaLayout, 0, &section));
     CHECK(section.present);
-    CHECK(section.fsType == 0);
-    CHECK(section.hashType == 3);
+    CHECK(section.partitionType == 0);
+    CHECK(section.fileSystemType == 3);
     CHECK(section.encryptionType == 1);
 
     const uint8_t *sectionBytes = nca + (size_t)section.byteOffset;
