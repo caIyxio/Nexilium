@@ -17,6 +17,8 @@ targets:
     sources:
       - path: Nexilium
       - path: Engine
+        excludes:
+          - tests/**
     dependencies:
       - package: AppEntitlements
         product: AppEntitlements
@@ -25,8 +27,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.siliconteam.nexilium
-        MARKETING_VERSION: "1.0.3"
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: "1.0.4"
+        CURRENT_PROJECT_VERSION: "5"
         SWIFT_OBJC_BRIDGING_HEADER: Nexilium/Nexilium-Bridging-Header.h
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
