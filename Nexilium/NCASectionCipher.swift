@@ -134,9 +134,11 @@ enum NCASectionCipher {
             )
         }
 
-        // NCA crypto_type and crypto_type2 are generation selectors. Use the
-        // lower value and map the one-based values to the prod.keys suffix.
-        let generation = min(header.keyGeneration, header.keyGeneration2)
+        // crypto_type2 supersedes crypto_type when nonzero. Both are
+        // one-based selectors; zero and one map to master-key revision 00.
+        let generation = header.keyGeneration2 != 0
+            ? header.keyGeneration2
+            : header.keyGeneration
         let revision = generation == 0 ? 0 : Int(generation) - 1
         let keyName = "key_area_key_\(categories[keyIndex])_\(String(format: "%02x", revision))"
         guard let keyAreaKey = keys[keyName], keyAreaKey.count == 16 else {
