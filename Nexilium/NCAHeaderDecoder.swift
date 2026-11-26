@@ -54,15 +54,13 @@ enum NCAHeaderDecoder {
         let key1 = Array(headerKey.prefix(16))
         let key2 = Array(headerKey.suffix(16))
         var decrypted = [UInt8](encrypted)
-        let sectorCount = encryptedHeaderSize / sectorSize
 
-        for sector in 0..<sectorCount {
-            // NCA2 section headers are encrypted as sector zero independently.
-            let sectorNumber = sector < 2 ? sector : sector
+        // The main header occupies sectors 0 and 1 for both supported formats.
+        for sector in 0..<2 {
             try decryptSector(
                 &decrypted,
                 offset: sector * sectorSize,
-                sectorNumber: UInt64(sectorNumber),
+                sectorNumber: UInt64(sector),
                 dataKey: key1,
                 tweakKey: key2
             )
@@ -73,6 +71,19 @@ enum NCAHeaderDecoder {
               ["NCA2", "NCA3"].contains(magic) else {
             let display = String(bytes: magicBytes, encoding: .ascii) ?? "????"
             throw NCAHeaderError.unsupportedMagic(display)
+        }
+
+        // In NCA2 each section header starts its XTS tweak at sector zero.
+        // NCA3 uses each section header's actual sector number.
+        for sector in 2..<6 {
+            let sectorNumber: UInt64 = magic == "NCA2" ? 0 : UInt64(sector)
+            try decryptSector(
+                &decrypted,
+                offset: sector * sectorSize,
+                sectorNumber: sectorNumber,
+                dataKey: key1,
+                tweakKey: key2
+            )
         }
 
         let contentType = decrypted[0x205]
