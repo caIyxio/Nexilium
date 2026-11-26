@@ -532,6 +532,12 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
                     memcpy(extraData, &entryType, sizeof(entryType));
                     extraDataSize = sizeof(entryType);
                     result = NX_RESULT_SUCCESS;
+                } else if (NXVFSIsDirectory(&engine->machine.vfs,
+                                            session->mountName, path)) {
+                    const uint32_t entryType = 0; /* Directory. */
+                    memcpy(extraData, &entryType, sizeof(entryType));
+                    extraDataSize = sizeof(entryType);
+                    result = NX_RESULT_SUCCESS;
                 }
             }
         } else if (methodID == 8 && rawSize >= 20) { /* OpenFile */
