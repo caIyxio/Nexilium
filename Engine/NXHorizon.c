@@ -389,7 +389,6 @@ static bool hipcGetBufferDescriptor(const uint8_t *buffer,
     const size_t pointerOffset = offset;
     const size_t sendOffset = pointerOffset + pointerCount * 8u;
     const size_t receiveOffset = sendOffset + sendCount * 12u;
-    const size_t exchangeOffset = receiveOffset + receiveCount * 12u;
     size_t descriptorOffset = 0;
 
     if (bufferType == 0x9u || bufferType == 0x19u) {
