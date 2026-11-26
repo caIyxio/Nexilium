@@ -123,6 +123,11 @@ static void writeU32LE(uint8_t *bytes, uint32_t value) {
     bytes[3] = (uint8_t)(value >> 24);
 }
 
+static void writeU64LE(uint8_t *bytes, uint64_t value) {
+    writeU32LE(bytes, (uint32_t)value);
+    writeU32LE(bytes + 4, (uint32_t)(value >> 32));
+}
+
 static NXSessionHandle *findSession(Machine *machine, uint32_t handle) {
     if (!machine || handle == 0) return NULL;
     for (size_t i = 0; i < NX_MAX_SESSION_HANDLES; ++i) {
@@ -196,6 +201,80 @@ static uint32_t createFileSession(Machine *machine, const NXVFSFile *file) {
     if (!session) return 0;
     session->file = *file;
     return handle;
+}
+
+static uint32_t createDirectorySession(Machine *machine,
+                                             const char *mountName,
+                                             const char *path,
+                                             uint64_t filterFlags) {
+    if (!machine || !mountName || !path || (filterFlags & ~UINT64_C(3)) != 0)
+        return 0;
+    bool mounted = false;
+    for (size_t i = 0; i < NX_VFS_MAX_MOUNTS; ++i) {
+        const NXVFSMount *mount = &machine->vfs.mounts[i];
+        if (mount->active && strcmp(mount->name, mountName) == 0) {
+            mounted = true;
+            break;
+        }
+    }
+    if (!mounted) return 0;
+
+    uint32_t handle = createSession(machine, NX_SERVICE_DIRECTORY);
+    NXSessionHandle *session = findSession(machine, handle);
+    if (!session) return 0;
+    const size_t pathLength = strlen(path);
+    if (pathLength >= sizeof(session->directoryPath)) {
+        memset(session, 0, sizeof(*session));
+        return 0;
+    }
+    size_t mountLength = strlen(mountName);
+    if (mountLength > NX_VFS_MOUNT_NAME_MAX) {
+        memset(session, 0, sizeof(*session));
+        return 0;
+    }
+    memcpy(session->mountName, mountName, mountLength + 1u);
+    memcpy(session->directoryPath, path, pathLength + 1u);
+    session->directoryFilterFlags = filterFlags;
+    session->directoryIndex = 0;
+    return handle;
+}
+
+static bool nextFilteredDirectoryItem(Machine *machine,
+                                     NXSessionHandle *session,
+                                     NXVFSDirectoryItem *item) {
+    if (!machine || !session || !item) return false;
+    for (;;) {
+        NXVFSDirectoryItem candidate;
+        if (!NXVFSReadDirectory(&machine->vfs, session->mountName,
+                                session->directoryPath,
+                                session->directoryIndex, &candidate))
+            return false;
+        ++session->directoryIndex;
+        const bool selected =
+            (candidate.isDirectory && (session->directoryFilterFlags & 1u)) ||
+            (!candidate.isDirectory && (session->directoryFilterFlags & 2u));
+        if (selected) {
+            *item = candidate;
+            return true;
+        }
+    }
+}
+
+static uint64_t countFilteredDirectoryItems(const Machine *machine,
+                                            const NXSessionHandle *session) {
+    if (!machine || !session) return 0;
+    uint64_t count = 0;
+    for (size_t index = 0; ; ++index) {
+        NXVFSDirectoryItem candidate;
+        if (!NXVFSReadDirectory(&machine->vfs, session->mountName,
+                                session->directoryPath, index, &candidate))
+            break;
+        const bool selected =
+            (candidate.isDirectory && (session->directoryFilterFlags & 1u)) ||
+            (!candidate.isDirectory && (session->directoryFilterFlags & 2u));
+        if (selected) ++count;
+    }
+    return count;
 }
 
 static bool readGuestCString(CPU *cpu, uint64_t address,
