@@ -101,10 +101,35 @@ private struct FirmwareInstallerView: View {
     @AppStorage("system.firmwareFilename") private var firmwareFilename = ""
     @AppStorage("system.prodKeysFilename") private var prodKeysFilename = ""
     @AppStorage("system.titleKeysFilename") private var titleKeysFilename = ""
-    @State private var importingFirmware = false
-    @State private var importingKeys = false
-    @State private var importingTitleKeys = false
+    @State private var importTarget: ImportTarget = .firmware
+    @State private var isImporterPresented = false
     @State private var errorMessage: String?
+
+    private enum ImportTarget {
+        case firmware
+        case prodKeys
+        case titleKeys
+
+        var destinationName: String {
+            switch self {
+            case .firmware: return "firmware-package.zip"
+            case .prodKeys: return "prod.keys"
+            case .titleKeys: return "title.keys"
+            }
+        }
+
+        var expectedExtension: String {
+            self == .firmware ? "zip" : "keys"
+        }
+
+        var displayName: String {
+            switch self {
+            case .firmware: return "firmware ZIP"
+            case .prodKeys: return "prod.keys"
+            case .titleKeys: return "title.keys"
+            }
+        }
+    }
 
     private var storageDirectory: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -116,7 +141,7 @@ private struct FirmwareInstallerView: View {
             Section("Nintendo Switch firmware") {
                 LabeledContent("Firmware package", value: firmwareImported ? "Imported: " + firmwareFilename : "Not imported")
                 Button {
-                    importingFirmware = true
+                    presentImporter(for: .firmware)
                 } label: {
                     Label(firmwareImported ? "Replace firmware package" : "Choose firmware package", systemImage: "folder")
                 }
@@ -125,21 +150,21 @@ private struct FirmwareInstallerView: View {
             Section("Keys") {
                 LabeledContent("prod.keys", value: prodKeysImported ? "Imported" : "Not imported")
                 Button {
-                    importingKeys = true
+                    presentImporter(for: .prodKeys)
                 } label: {
                     Label(prodKeysImported ? "Replace prod.keys" : "Choose prod.keys", systemImage: "key")
                 }
 
                 LabeledContent("title.keys", value: titleKeysImported ? "Imported" : "Not imported")
                 Button {
-                    importingTitleKeys = true
+                    presentImporter(for: .titleKeys)
                 } label: {
                     Label(titleKeysImported ? "Replace title.keys" : "Choose title.keys", systemImage: "key.fill")
                 }
             }
 
             Section {
-                Text("Import a firmware .zip archive and both key files. Nexilium currently stores these files locally; firmware parsing, validation and system emulation are not implemented yet.")
+                Text("Choose an individual file or a folder containing it. Firmware must be a .zip file; key files must be named prod.keys and title.keys. Nexilium currently stores the selected files locally; firmware parsing, validation and system emulation are not implemented yet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -160,70 +185,121 @@ private struct FirmwareInstallerView: View {
             }
         }
         .fileImporter(
-            isPresented: $importingFirmware,
-            allowedContentTypes: [.zip],
+            isPresented: $isImporterPresented,
+            allowedContentTypes: [.item, .folder],
             allowsMultipleSelection: false
         ) { result in
-            handleImport(result, expectedExtension: "zip", destinationName: "firmware-package.zip") { name in
-                firmwareFilename = name
-                firmwareImported = true
-            }
-        }
-        .fileImporter(
-            isPresented: $importingKeys,
-            allowedContentTypes: [.plainText, .data],
-            allowsMultipleSelection: false
-        ) { result in
-            handleImport(result, expectedExtension: "keys", destinationName: "prod.keys") { name in
-                prodKeysFilename = name
-                prodKeysImported = true
-            }
-        }
-        .fileImporter(
-            isPresented: $importingTitleKeys,
-            allowedContentTypes: [.plainText, .data],
-            allowsMultipleSelection: false
-        ) { result in
-            handleImport(result, expectedExtension: "keys", destinationName: "title.keys") { name in
-                titleKeysFilename = name
-                titleKeysImported = true
-            }
+            handleImport(result)
         }
     }
 
-    private func handleImport(
-        _ result: Result<[URL], Error>,
-        expectedExtension: String?,
-        destinationName: String,
-        onSuccess: (String) -> Void
-    ) {
-        do {
-            guard let sourceURL = try result.get().first else { return }
-            if let expectedExtension, sourceURL.pathExtension.lowercased() != expectedExtension {
-                errorMessage = "Please select a file named \(destinationName)."
-                return
-            }
+    private func presentImporter(for target: ImportTarget) {
+        importTarget = target
+        errorMessage = nil
+        isImporterPresented = true
+    }
 
-            let hasAccess = sourceURL.startAccessingSecurityScopedResource()
+    private func handleImport(_ result: Result<[URL], Error>) {
+        do {
+            guard let selectedURL = try result.get().first else { return }
+
+            let hasAccess = selectedURL.startAccessingSecurityScopedResource()
             defer {
                 if hasAccess {
-                    sourceURL.stopAccessingSecurityScopedResource()
+                    selectedURL.stopAccessingSecurityScopedResource()
                 }
             }
 
+            let sourceURL = try resolveFile(from: selectedURL)
             try FileManager.default.createDirectory(
                 at: storageDirectory,
                 withIntermediateDirectories: true
             )
-            let destination = storageDirectory.appendingPathComponent(destinationName)
+
+            let destination = storageDirectory.appendingPathComponent(importTarget.destinationName)
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.copyItem(at: sourceURL, to: destination)
+
+            switch importTarget {
+            case .firmware:
+                firmwareFilename = sourceURL.lastPathComponent
+                firmwareImported = true
+            case .prodKeys:
+                prodKeysFilename = sourceURL.lastPathComponent
+                prodKeysImported = true
+            case .titleKeys:
+                titleKeysFilename = sourceURL.lastPathComponent
+                titleKeysImported = true
+            }
             errorMessage = nil
-            onSuccess(sourceURL.lastPathComponent)
         } catch {
-            errorMessage = "Could not import the selected file: \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func resolveFile(from selectedURL: URL) throws -> URL {
+        let values = try selectedURL.resourceValues(forKeys: [.isDirectoryKey])
+        let candidates: [URL]
+
+        if values.isDirectory == true {
+            guard let enumerator = FileManager.default.enumerator(
+                at: selectedURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                throw ImportError.cannotReadFolder
+            }
+
+            var matches: [URL] = []
+            for case let fileURL as URL in enumerator {
+                let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                guard !isDirectory else { continue }
+
+                if matchesExpectedFile(fileURL) {
+                    matches.append(fileURL)
+                }
+            }
+            candidates = matches
+        } else {
+            candidates = matchesExpectedFile(selectedURL) ? [selectedURL] : []
+        }
+
+        guard !candidates.isEmpty else {
+            throw ImportError.fileNotFound(importTarget.displayName)
+        }
+        guard candidates.count == 1, let match = candidates.first else {
+            throw ImportError.multipleFiles(importTarget.displayName)
+        }
+        return match
+    }
+
+    private func matchesExpectedFile(_ url: URL) -> Bool {
+        switch importTarget {
+        case .firmware:
+            return url.pathExtension.lowercased() == "zip"
+        case .prodKeys:
+            return url.lastPathComponent.lowercased() == "prod.keys"
+        case .titleKeys:
+            return url.lastPathComponent.lowercased() == "title.keys"
+        }
+    }
+
+    private enum ImportError: LocalizedError {
+        case cannotReadFolder
+        case fileNotFound(String)
+        case multipleFiles(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .cannotReadFolder:
+                return "Nexilium couldn't read that folder. Try selecting the file directly."
+            case .fileNotFound(let name):
+                return "No \(name) was found in the selected location."
+            case .multipleFiles(let name):
+                return "More than one \(name) was found. Select the exact file instead of its parent folder."
+            }
         }
     }
 }
