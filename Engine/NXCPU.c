@@ -3,6 +3,7 @@
 #include "Arm64/mmu.h"
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 const char *NXCPUBackendName(void) {
     return "AArch64 interpreter (no JIT)";
@@ -40,14 +41,27 @@ int NXCPUSelfTest(void) {
 
     NXCPUResult runResult = NXEngineRun(&engine, 5);
     uint64_t stored = UINT64_MAX;
+    bool memoryReadOK = mem_read(&engine.cpu, dataBase, 8, &stored);
     bool ok = runResult == NX_CPU_STEP_LIMIT &&
               engine.cpu.x[0] == 42 &&
               engine.cpu.x[1] == 50 &&
               engine.cpu.x[2] == 0 &&
               engine.cpu.x[3] == 0 &&
               (engine.cpu.nzcv & PS_Z) != 0 &&
-              mem_read(&engine.cpu, dataBase, 8, &stored) &&
-              stored == 0;
+              memoryReadOK && stored == 0;
+    if (!ok) {
+        fprintf(stderr,
+                "CPU self-test detail: result=%d pc=%llx x0=%llx x1=%llx x2=%llx x3=%llx x4=%llx NZCV=%08x memOK=%d stored=%llx exception=%d\\n",
+                (int)runResult, (unsigned long long)engine.cpu.pc,
+                (unsigned long long)engine.cpu.x[0],
+                (unsigned long long)engine.cpu.x[1],
+                (unsigned long long)engine.cpu.x[2],
+                (unsigned long long)engine.cpu.x[3],
+                (unsigned long long)engine.cpu.x[4],
+                engine.cpu.nzcv, memoryReadOK,
+                (unsigned long long)stored,
+                engine.machine.pendingException.valid);
+    }
     NXEngineDestroy(&engine);
     return ok ? 1 : 0;
 }
