@@ -190,15 +190,13 @@ static bool resolveDynamicSymbol(NXEngine *engine, uint64_t loadBase,
 
     /* Undefined weak symbols resolve to zero when no provider is loaded. */
     const uint8_t binding = symbol[4] >> 4;
-    if (binding == 2u && !registry) {
-        *symbolAddress = 0;
-        return true;
-    }
+    if (binding == 2u && !registry)
+        return false; /* Defer weak resolution until all modules are loaded. */
 
     char requestedName[512];
     if (!readSymbolName(engine, current, symbol,
                         requestedName, sizeof(requestedName))) {
-        if (binding == 2u) {
+        if (binding == 2u && registry) {
             *symbolAddress = 0;
             return true;
         }
