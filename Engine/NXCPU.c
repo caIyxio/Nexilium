@@ -105,13 +105,13 @@ int NXCPUSelfTest(void) {
 
     /* Validate SVC port connection + a CMIF RegisterClient round-trip on sm:. */
     const char smPortName[] = "sm:";
-    if (!NXEngineLoadBytes(&svcEngine, codeBase + 0x100, smPortName, sizeof(smPortName))) {
+    if (!NXEngineLoadBytes(&svcEngine, svcCodeBase + 0x100, smPortName, sizeof(smPortName))) {
         NXEngineDestroy(&svcEngine);
         return 0;
     }
     uint32_t smHandle = 0;
     uint32_t connectResult = NXHorizonConnectToNamedPort(
-        &svcEngine, codeBase + 0x100, &smHandle
+        &svcEngine, svcCodeBase + 0x100, &smHandle
     );
     uint8_t *hipc = (uint8_t *)mem_host_ptr(
         &svcEngine.cpu, NX_TLS_BASE + NX_HIPC_TLS_OFFSET, 0x100,
