@@ -51,42 +51,102 @@ final class NexiliumGuestProcess {
         usingRegistry: Bool
     ) throws {
         var prepared = NXPreparedProcess()
-        let loaded = image.npdm.withUnsafeBytes { npdmBuffer -> Bool in
+        let npdmCount = image.npdm.count
+        let nsoCount = image.mainNSO.count
+
+        let loaded: Bool = image.npdm.withUnsafeBytes { (npdmBuffer: UnsafeRawBufferPointer) -> Bool in
             guard let npdmBytes = npdmBuffer.bindMemory(to: UInt8.self).baseAddress else {
                 return false
             }
-            return image.mainNSO.withUnsafeBytes { nsoBuffer -> Bool in
+
+            let result: Bool = image.mainNSO.withUnsafeBytes { (nsoBuffer: UnsafeRawBufferPointer) -> Bool in
                 guard let nsoBytes = nsoBuffer.bindMemory(to: UInt8.self).baseAddress else {
                     return false
                 }
+
                 if usingRegistry {
-                    return NXEnginePrepareMainThreadWithRegistry(
+                    let registryResult: Bool = NXEnginePrepareMainThreadWithRegistry(
                         &engine,
                         npdmBytes,
-                        image.npdm.count,
+                        npdmCount,
                         nsoBytes,
-                        image.mainNSO.count,
+                        nsoCount,
                         loadBase,
                         &moduleRegistry,
                         &prepared
                     )
+                    return registryResult
                 }
-                return NXEnginePrepareMainThread(
+
+                let prepareResult: Bool = NXEnginePrepareMainThread(
                     &engine,
                     npdmBytes,
-                    image.npdm.count,
+                    npdmCount,
                     nsoBytes,
-                    image.mainNSO.count,
+                    nsoCount,
                     loadBase,
                     &prepared
                 )
+                return prepareResult
             }
+            return result
         }
 
         guard loaded else {
             throw NexiliumGuestProcessError.invalidProgramImage
         }
         preparedProcess = prepared
+    }
+
+    private func mountRomFS(_ romFS: Data) throws {
+        let romFSSize = romFS.count
+        let mounted: Bool = romFS.withUnsafeBytes { (rawBuffer: UnsafeRawBufferPointer) -> Bool in
+            guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                return false
+            }
+            let result: Bool = NXEngineMountRomFS(
+                &engine,
+                "romfs",
+                bytes,
+                romFSSize
+            )
+            return result
+        }
+
+        guard mounted else {
+            throw NexiliumGuestProcessError.invalidSystemMenuAssets
+        }
+        mountedFileSystemImages.append(romFS)
+    }
+
+    private func loadDependencyModule(
+        _ module: NCAProgramModule,
+        at moduleBase: UInt64
+    ) throws {
+        var loadedModule = NXLoadedNSO()
+        let moduleSize = module.image.count
+
+        let moduleLoaded: Bool = module.image.withUnsafeBytes { (rawBuffer: UnsafeRawBufferPointer) -> Bool in
+            guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                return false
+            }
+            let result: Bool = NXEngineLoadNSO(
+                &engine,
+                bytes,
+                moduleSize,
+                moduleBase,
+                &loadedModule
+            )
+            return result
+        }
+
+        guard moduleLoaded else {
+            throw NexiliumGuestProcessError.invalidProgramImage
+        }
+        let registered: Bool = NXNSORegistryRegister(&moduleRegistry, &loadedModule)
+        guard registered else {
+            throw NexiliumGuestProcessError.invalidProgramImage
+        }
     }
 
     func loadSystemMenu(
@@ -99,35 +159,26 @@ final class NexiliumGuestProcess {
         let romFSURL = assets.romFSPath.map {
             storageDirectory.appendingPathComponent($0)
         }
-        let moduleURLs = (assets.modulePaths ?? []).map {
+        let modulePaths = assets.modulePaths ?? []
+        let moduleURLs = modulePaths.map {
             storageDirectory.appendingPathComponent($0)
         }
+
         let image = try NCAProgramImageReader.loadExtracted(
             mainNSOURL: mainURL,
             npdmURL: npdmURL,
             romFSURL: romFSURL,
             moduleURLs: moduleURLs
         )
+
+        let expectedSystemMenuTitleID: UInt64 = 0x0100000000001000
         guard image.metadata.titleID == assets.titleID,
-              image.metadata.titleID == 0x0100000000001000 else {
+              image.metadata.titleID == expectedSystemMenuTitleID else {
             throw NexiliumGuestProcessError.invalidSystemMenuAssets
         }
+
         if let romFS = image.romFS {
-            let mounted = romFS.withUnsafeBytes { rawBuffer -> Bool in
-                guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
-                    return false
-                }
-                return NXEngineMountRomFS(
-                    &engine,
-                    "romfs",
-                    bytes,
-                    romFS.count
-                )
-            }
-            guard mounted else {
-                throw NexiliumGuestProcessError.invalidSystemMenuAssets
-            }
-            mountedFileSystemImages.append(romFS)
+            try mountRomFS(romFS)
         }
 
         guard image.modules.count < 32, moduleRegistry.count == 0 else {
@@ -136,32 +187,23 @@ final class NexiliumGuestProcess {
 
         /* Load ExeFS dependency NSOs first so the main image can resolve them. */
         for (index, module) in image.modules.enumerated() {
-            let moduleBase = UInt64(0x7200000000) +
-                             UInt64(index) * UInt64(0x20000000)
-            var loadedModule = NXLoadedNSO()
-            let moduleLoaded = module.image.withUnsafeBytes { rawBuffer -> Bool in
-                guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
-                    return false
-                }
-                return NXEngineLoadNSO(
-                    &engine,
-                    bytes,
-                    module.image.count,
-                    moduleBase,
-                    &loadedModule
-                )
-            }
-            guard moduleLoaded,
-                  NXNSORegistryRegister(&moduleRegistry, &loadedModule) else {
-                throw NexiliumGuestProcessError.invalidProgramImage
-            }
+            let indexValue = UInt64(index)
+            let moduleStride: UInt64 = 0x20000000
+            let moduleBase = UInt64(0x7200000000) + indexValue * moduleStride
+            try loadDependencyModule(module, at: moduleBase)
         }
 
         /* Register every image before resolving imports to support cyclic dependencies. */
         try prepare(image, at: loadBase, usingRegistry: false)
-        guard var prepared = self.preparedProcess,
-              NXNSORegistryRegister(&moduleRegistry, &prepared.mainImage),
-              NXNSORegistryResolvePending(&engine, &moduleRegistry) else {
+        guard var prepared = self.preparedProcess else {
+            throw NexiliumGuestProcessError.invalidProgramImage
+        }
+        let mainRegistered = NXNSORegistryRegister(&moduleRegistry, &prepared.mainImage)
+        guard mainRegistered else {
+            throw NexiliumGuestProcessError.invalidProgramImage
+        }
+        let importsResolved = NXNSORegistryResolvePending(&engine, &moduleRegistry)
+        guard importsResolved else {
             throw NexiliumGuestProcessError.invalidProgramImage
         }
         self.preparedProcess = prepared
