@@ -28,6 +28,7 @@ static void put32(uint8_t *bytes, uint32_t value) {
 static void buildHeader(uint8_t *header) {
     memset(header, 0, NX_NCA_HEADER_SIZE);
     memcpy(header + 0x200, "NCA3", 4);
+    put32(header + 0x208, 12u * 0x200u);
 
     /* Section 0: RomFS, integrity hash tree, AES-CTR. */
     put32(header + 0x240, 6);
