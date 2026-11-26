@@ -252,6 +252,47 @@ static void testCrossModuleSymbolResolution(void) {
     NXEngineDestroy(&engine);
 }
 
+static void testTwoPhaseModuleRegistryResolution(void) {
+    uint8_t providerNSO[0x400], consumerNSO[0x400];
+    buildSymbolRelocatableNSO(providerNSO,sizeof(providerNSO));
+    buildSymbolRelocatableNSO(consumerNSO,sizeof(consumerNSO));
+
+    uint8_t *consumerSymbol = consumerNSO + 0x300 + 0x40 + 24;
+    consumerSymbol[6] = 0;
+    put64(consumerSymbol + 8,0);
+
+    NXEngine engine;
+    CHECK(NXEngineInit(&engine));
+    NXNSORegistry registry;
+    NXNSORegistryInit(&registry);
+
+    NXLoadedNSO provider, consumer;
+    const uint64_t providerBase=UINT64_C(0x7620000000);
+    const uint64_t consumerBase=UINT64_C(0x7630000000);
+    CHECK(NXEngineLoadNSO(
+        &engine,providerNSO,sizeof(providerNSO),providerBase,&provider
+    ));
+    CHECK(NXNSORegistryRegister(&registry,&provider));
+    CHECK(NXEngineLoadNSO(
+        &engine,consumerNSO,sizeof(consumerNSO),consumerBase,&consumer
+    ));
+    CHECK(consumer.symbolRelocationCount==0);
+    CHECK(consumer.unsupportedRelocationCount==1);
+    CHECK(NXNSORegistryRegister(&registry,&consumer));
+
+    CHECK(NXNSORegistryResolvePending(&engine,&registry));
+    CHECK(registry.pendingRelocationsResolved);
+    CHECK(registry.modules[1].symbolRelocationCount==1);
+    CHECK(registry.modules[1].unsupportedRelocationCount==0);
+
+    uint64_t relocated=0;
+    CHECK(NXEngineReadBytes(
+        &engine,consumerBase+0x1C0,&relocated,sizeof(relocated)
+    ));
+    CHECK(relocated==providerBase+0x190);
+    NXEngineDestroy(&engine);
+}
+
 static void testMOD0RELRRelativeRelocation(void) {
     uint8_t nso[0x300];
     buildRelrNSO(nso,sizeof(nso));
@@ -346,6 +387,7 @@ int main(void) {
     testMOD0RelativeRelocation();
     testMOD0LocalSymbolRelocation();
     testCrossModuleSymbolResolution();
+    testTwoPhaseModuleRegistryResolution();
     testMOD0RELRRelativeRelocation();
     testUnsupportedMOD0RelocationIsReported();
     testPrepareMainThread();
