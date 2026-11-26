@@ -208,6 +208,62 @@ static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
     return true;
 }
 
+static bool applyRelrTarget(NXEngine *engine, uint64_t loadBase,
+                               const NXLoadedNSO *image,
+                               uint64_t targetOffset,
+                               NXLoadedNSO *stats) {
+    uint64_t targetAddress = 0;
+    uint64_t implicitAddend = 0;
+    uint64_t relocatedValue = 0;
+    if (addOverflowU64(loadBase, targetOffset, &targetAddress) ||
+        !addressInImage(image, targetAddress, sizeof(uint64_t)) ||
+        !readGuestU64(engine, targetAddress, &implicitAddend) ||
+        addOverflowU64(loadBase, implicitAddend, &relocatedValue) ||
+        !writeGuestU64(engine, targetAddress, relocatedValue))
+        return false;
+    ++stats->relativeRelocationCount;
+    return true;
+}
+
+static bool applyRelrTable(NXEngine *engine, uint64_t loadBase,
+                           const NXLoadedNSO *image,
+                           uint64_t tableAddress, uint64_t tableSize,
+                           NXLoadedNSO *stats) {
+    if (tableSize == 0) return true;
+    if (tableSize % 8u != 0 || tableSize > SIZE_MAX ||
+        !addressInImage(image, tableAddress, (size_t)tableSize))
+        return false;
+
+    uint64_t where = 0;
+    const uint64_t count = tableSize / 8u;
+    for (uint64_t i = 0; i < count; ++i) {
+        uint64_t entryAddress = 0;
+        if (addOverflowU64(tableAddress, i * 8u, &entryAddress))
+            return false;
+        uint64_t entry = 0;
+        if (!readGuestU64(engine, entryAddress, &entry)) return false;
+
+        if ((entry & 1u) == 0) {
+            where = entry;
+            if (!applyRelrTarget(engine, loadBase, image, where, stats))
+                return false;
+            if (addOverflowU64(where, 8u, &where)) return false;
+        } else {
+            const uint64_t bitmap = entry >> 1;
+            for (uint32_t bit = 0; bit < 63u; ++bit) {
+                if ((bitmap & (UINT64_C(1) << bit)) == 0) continue;
+                uint64_t targetOffset = 0;
+                if (addOverflowU64(where, (uint64_t)bit * 8u, &targetOffset) ||
+                    !applyRelrTarget(engine, loadBase, image,
+                                     targetOffset, stats))
+                    return false;
+            }
+            if (addOverflowU64(where, 63u * 8u, &where)) return false;
+        }
+    }
+    return true;
+}
+
 /*
  * The MOD0 pointer is stored at +4 in the loaded text image. This pass applies
  * only symbol-free R_AARCH64_RELATIVE relocations; rtld-style symbol lookup
@@ -251,6 +307,7 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
 
     uint64_t relaOffset = 0, relaSize = 0, relaEntrySize = 0;
     uint64_t relOffset = 0, relSize = 0, relEntrySize = 0;
+    uint64_t relrOffset = 0, relrSize = 0, relrEntrySize = 0;
     const uint64_t maxEntries = image->imageSize / 16u;
     bool terminated = false;
 
@@ -276,6 +333,9 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
             case 17: relOffset = value; break;  /* DT_REL */
             case 18: relSize = value; break;    /* DT_RELSZ */
             case 19: relEntrySize = value; break; /* DT_RELENT */
+            case 35: relrSize = value; break;     /* DT_RELRSZ */
+            case 36: relrOffset = value; break;   /* DT_RELR */
+            case 37: relrEntrySize = value; break; /* DT_RELRENT */
             default: break;
         }
     }
@@ -295,6 +355,14 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
             addOverflowU64(loadBase, relOffset, &tableAddress) ||
             !applyRelTable(engine, loadBase, image,
                            tableAddress, relSize, image))
+            return false;
+    }
+    if (relrSize != 0) {
+        uint64_t tableAddress = 0;
+        if (relrEntrySize != 8u ||
+            addOverflowU64(loadBase, relrOffset, &tableAddress) ||
+            !applyRelrTable(engine, loadBase, image,
+                            tableAddress, relrSize, image))
             return false;
     }
     return true;
