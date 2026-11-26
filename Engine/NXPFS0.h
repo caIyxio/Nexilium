@@ -31,5 +31,7 @@ bool NXEngineOpenPFS0(const uint8_t *image, size_t imageSize,
 /* Returns false when the name is absent or the PFS0 image is malformed. */
 bool NXEnginePFS0GetFile(const NXPFS0View *view, const char *name,
                          NXPFS0File *file);
+bool NXEnginePFS0GetFileByIndex(const NXPFS0View *view, size_t index,
+                                NXPFS0File *file);
 
 #endif
