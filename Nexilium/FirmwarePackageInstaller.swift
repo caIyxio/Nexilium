@@ -17,7 +17,9 @@ struct FirmwareSystemMenuAssets: Codable {
     let titleID: UInt64
     let mainNSOPath: String
     let npdmPath: String
+    let romFSPath: String?
     let mainNSOBytes: UInt64
+    let romFSBytes: UInt64?
 }
 
 struct FirmwareFileRecord: Codable {
@@ -323,7 +325,7 @@ enum FirmwarePackageInstaller {
                 do {
                     let program = try NCAProgramImageReader.read(
                         from: ncaURL,
-                        section: section,
+                        sections: header.sections,
                         header: header,
                         prodKeysURL: prodKeysURL
                     )
@@ -338,13 +340,24 @@ enum FirmwarePackageInstaller {
                     try program.mainNSO.write(to: mainURL, options: .atomic)
                     try program.npdm.write(to: npdmURL, options: .atomic)
 
+                    var romFSPath: String?
+                    var romFSBytes: UInt64?
+                    if let romFS = program.romFS {
+                        let romFSURL = outputDirectory.appendingPathComponent("romfs.bin")
+                        try romFS.write(to: romFSURL, options: .atomic)
+                        romFSPath = "system-menu/romfs.bin"
+                        romFSBytes = UInt64(romFS.count)
+                    }
+
                     return (
                         FirmwareSystemMenuAssets(
                             ncaPath: candidate.path,
                             titleID: program.metadata.titleID,
                             mainNSOPath: "system-menu/main.nso",
                             npdmPath: "system-menu/main.npdm",
-                            mainNSOBytes: UInt64(program.mainNSO.count)
+                            romFSPath: romFSPath,
+                            mainNSOBytes: UInt64(program.mainNSO.count),
+                            romFSBytes: romFSBytes
                         ),
                         nil
                     )
