@@ -1,5 +1,4 @@
 import SwiftUI
-import os
 import AppEntitlements
 
 struct SettingsView: View {
@@ -93,7 +92,11 @@ private struct GraphicsSettingsView: View {
     @AppStorage("graphics.vsync") private var verticalSync = true
     @AppStorage("graphics.shaderCache") private var shaderCache = true
     @AppStorage("graphics.showPerformanceOverlay") private var showPerformanceOverlay = false
-    @AppStorage("graphics.ramLimit") private var ramLimit = "Auto"
+    @AppStorage("graphics.ramLimitGB") private var ramLimitGB = 2.0
+
+    private var ramLimitLabel: String {
+        ramLimitGB.formatted(.number.precision(.fractionLength(0...1))) + " GB"
+    }
 
     var body: some View {
         Form {
@@ -115,25 +118,19 @@ private struct GraphicsSettingsView: View {
             }
 
             Section("Memory") {
-                Picker("Emulator RAM limit", selection: $ramLimit) {
-                    Text("Automatic").tag("Auto")
-                    Text("1 GB").tag("1 GB")
-                    Text("1.5 GB").tag("1.5 GB")
-                    Text("2 GB").tag("2 GB")
-                    Text("3 GB").tag("3 GB")
-                    Text("4 GB").tag("4 GB")
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("RAM limit")
+                        Spacer()
+                        Text(ramLimitLabel)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+
+                    Slider(value: $ramLimitGB, in: 1...4, step: 0.5)
                 }
 
                 MemoryEntitlementStatusView()
-                MemoryBudgetStatusView()
-
-                Text("Entitlement status is read from Nexilium’s Mach-O code signature. Unsigned development builds may not contain a readable signature, so the result can be unavailable.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                Text("The emulator RAM cap is a preference for the emulation memory manager. It does not increase the memory iOS allows Nexilium to use.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
 
             Section("Performance") {
@@ -160,43 +157,12 @@ private struct MemoryEntitlementStatusView: View {
             }
             return enabled ? "Enabled" : "Disabled"
         } catch {
-            return "Unavailable in this build"
+            return "Unavailable"
         }
     }
 
     var body: some View {
         LabeledContent("Increased memory entitlement", value: status)
-    }
-}
-
-private struct MemoryBudgetStatusView: View {
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 2)) { _ in
-            let availableBytes = os_proc_available_memory()
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("Available to Nexilium")
-                    Spacer()
-                    Text(ByteCountFormatter.string(
-                        fromByteCount: Int64(availableBytes),
-                        countStyle: .memory
-                    ))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                }
-
-                if availableBytes == 0 {
-                    Label("Memory budget unavailable", systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Label("Live iOS memory budget detected", systemImage: "checkmark.circle")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.vertical, 3)
-        }
     }
 }
 
@@ -302,10 +268,11 @@ private struct AboutView: View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    Image(systemName: "gamecontroller.fill")
-                        .font(.system(size: 30))
+                    Image("AppIcon")
+                        .resizable()
+                        .scaledToFit()
                         .frame(width: 54, height: 54)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 13))
+                        .clipShape(RoundedRectangle(cornerRadius: 13))
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Nexilium")
