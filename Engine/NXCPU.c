@@ -1,6 +1,7 @@
 #include "NXCPU.h"
 #include "NXMachine.h"
 #include "NXNSO.h"
+#include "NXPFS0.h"
 #include "NXHorizon.h"
 #include "Arm64/mmu.h"
 #include <stdint.h>
@@ -143,6 +144,28 @@ int NXCPUSelfTest(void) {
     }
     NXEngineDestroy(&svcEngine);
     if (!svcOK || !ipcOK) return 0;
+
+    /* Validate PFS0 directory bounds, names, and file data views. */
+    uint8_t pfs[0x36] = {0};
+    pfs[0] = 'P'; pfs[1] = 'F'; pfs[2] = 'S'; pfs[3] = '0';
+    pfs[4] = 1; /* One file. */
+    pfs[8] = 9; /* "test.bin" plus NUL. */
+    pfs[0x10 + 8] = 5; /* File size = 5 bytes. */
+    memcpy(pfs + 0x28, "test.bin", 9);
+    memcpy(pfs + 0x31, "hello", 5);
+    NXPFS0View pfsView;
+    NXPFS0File pfsFile;
+    bool pfsOpened = NXEngineOpenPFS0(pfs, sizeof(pfs), &pfsView);
+    bool pfsFound = pfsOpened &&
+                    NXEnginePFS0GetFile(&pfsView, "test.bin", &pfsFile);
+    bool pfsOK = pfsFound && pfsFile.size == 5 &&
+                 memcmp(pfsFile.bytes, "hello", 5) == 0 &&
+                 !NXEnginePFS0GetFile(&pfsView, "missing.nso", &pfsFile);
+    if (!pfsOK) {
+        fprintf(stderr, "PFS0 self-test failed: opened=%d found=%d\\n",
+                pfsOpened, pfsFound);
+        return 0;
+    }
 
     /* Load a compressed NSO text segment (one MOVZ instruction) and execute it. */
     NXEngine nsoEngine;
