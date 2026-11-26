@@ -51,5 +51,6 @@ bool NXEngineRomFSGetFile(const NXRomFSView *view, const char *path,
 bool NXEngineRomFSGetDirectoryItem(const NXRomFSView *view,
                                    const char *path, size_t index,
                                    NXRomFSDirectoryItem *item);
+bool NXEngineRomFSIsDirectory(const NXRomFSView *view, const char *path);
 
 #endif
