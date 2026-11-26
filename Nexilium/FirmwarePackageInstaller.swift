@@ -18,7 +18,7 @@ struct FirmwareSystemMenuAssets: Codable {
     let mainNSOPath: String
     let npdmPath: String
     let romFSPath: String?
-    let modulePaths: [String]
+    let modulePaths: [String]?
     let mainNSOBytes: UInt64
     let romFSBytes: UInt64?
 }
