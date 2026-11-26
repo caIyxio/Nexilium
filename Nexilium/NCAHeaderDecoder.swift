@@ -159,7 +159,7 @@ enum NCAHeaderDecoder {
                     let superblock = baseAddress.advanced(by: fsHeaderOffset + 0x8)
                     return NXEngineOpenIVFC(
                         superblock,
-                        NX_IVFC_HEADER_SIZE,
+                        Int(NX_IVFC_HEADER_SIZE),
                         nativeSection.byteSize,
                         &ivfcView
                     ) && NXEngineIVFCGetDataLevel(
