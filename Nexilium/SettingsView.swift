@@ -268,7 +268,7 @@ private struct AboutView: View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    Image("AppIcon")
+                    Image("NexiliumIcon")
                         .resizable()
                         .scaledToFit()
                         .frame(width: 54, height: 54)
