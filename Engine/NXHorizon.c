@@ -551,6 +551,65 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
                     result = movedHandle ? NX_RESULT_SUCCESS : NX_RESULT_OUT_OF_MEMORY;
                 }
             }
+        } else if (methodID == 9 && rawSize >= 24) { /* OpenDirectory */
+            uint64_t pathAddress = 0, pathSize = 0;
+            char path[0x302];
+            const uint64_t filterFlags = readU64LE(raw + 16);
+            if (hipcGetBufferDescriptor(buffer, 0x9u, 0,
+                                        &pathAddress, &pathSize) &&
+                readGuestPath(&engine->cpu, pathAddress, pathSize,
+                              path, sizeof(path))) {
+                movedHandle = createDirectorySession(
+                    &engine->machine, session->mountName, path, filterFlags
+                );
+                result = movedHandle ? NX_RESULT_SUCCESS : NX_RESULT_NOT_FOUND;
+            }
+        }
+    } else if (session->service == NX_SERVICE_DIRECTORY) {
+        if (methodID == 1 && rawSize >= 16) { /* GetEntryCount */
+            const uint64_t entryCount =
+                countFilteredDirectoryItems(&engine->machine, session);
+            writeU64LE(extraData, entryCount);
+            extraDataSize = sizeof(entryCount);
+            result = NX_RESULT_SUCCESS;
+        } else if (methodID == 0 && rawSize >= 16) { /* Read */
+            uint64_t destinationAddress = 0, destinationSize = 0;
+            if (hipcGetBufferDescriptor(buffer, 0x6u, 0,
+                                        &destinationAddress, &destinationSize)) {
+                const size_t capacity = (size_t)(destinationSize / 0x310u);
+                const size_t boundedCapacity = capacity < 64u ? capacity : 64u;
+                if (boundedCapacity == 0) {
+                    result = NX_RESULT_INVALID_SIZE;
+                } else {
+                    const size_t outputBytes = boundedCapacity * 0x310u;
+                    uint8_t *destination = (uint8_t *)mem_host_ptr(
+                        &engine->cpu, destinationAddress, outputBytes, ACC_WRITE
+                    );
+                    if (destination) {
+                        uint64_t entriesRead = 0;
+                        while (entriesRead < boundedCapacity) {
+                            NXVFSDirectoryItem item;
+                            if (!nextFilteredDirectoryItem(
+                                    &engine->machine, session, &item))
+                                break;
+                            uint8_t *entry = destination + entriesRead * 0x310u;
+                            memset(entry, 0, 0x310u);
+                            const size_t nameLength =
+                                item.nameLength < 0x300u ? item.nameLength : 0x300u;
+                            memcpy(entry, item.name, nameLength);
+                            entry[0x301] = item.isDirectory ? 1u : 0u;
+                            entry[0x304] = item.isDirectory ? 0u : 1u;
+                            writeU64LE(entry + 0x308, (uint64_t)item.size);
+                            ++entriesRead;
+                        }
+                        writeU64LE(extraData, entriesRead);
+                        extraDataSize = sizeof(entriesRead);
+                        result = NX_RESULT_SUCCESS;
+                    } else {
+                        result = NX_RESULT_INVALID_ADDRESS;
+                    }
+                }
+            }
         }
     } else if (session->service == NX_SERVICE_FILE) {
         if (methodID == 4 && rawSize >= 16) { /* GetSize */
