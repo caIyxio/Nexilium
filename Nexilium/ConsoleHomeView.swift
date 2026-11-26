@@ -6,6 +6,7 @@ struct ConsoleHomeView: View {
     var onExit: (() -> Void)? = nil
     @State private var showingMiiCreator = false
     @State private var showingSettings = false
+    @State private var settingsCategory: SettingsCategory = .graphics
 
     var body: some View {
         GeometryReader { geometry in
@@ -49,8 +50,8 @@ struct ConsoleHomeView: View {
                     HStack(spacing: 0) {
                         menuButton("Mii Creator", icon: .smile) { showingMiiCreator = true }
                         menuButton("Firmware", icon: .folderDown) { onFirmware?() }
-                        menuButton("Controllers", icon: .gamepad2) { showingSettings = true }
-                        menuButton("Settings", icon: .settings) { showingSettings = true }
+                        menuButton("Controllers", icon: .gamepad2) { settingsCategory = .controllers; showingSettings = true }
+                        menuButton("Settings", icon: .settings) { settingsCategory = .graphics; showingSettings = true }
                         if let onExit {
                             menuButton("Exit", icon: .power) { onExit() }
                         }
@@ -70,7 +71,7 @@ struct ConsoleHomeView: View {
             NavigationStack { MiiCreatorView() }
         }
         .fullScreenCover(isPresented: $showingSettings) {
-            NavigationStack { SettingsView() }
+            SettingsView(initialSelection: settingsCategory)
         }
     }
 
