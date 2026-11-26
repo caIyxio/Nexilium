@@ -8,9 +8,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Keep only the newest build for a branch; avoid piling up stale IPA builds.
+concurrency:
+  group: nexilium-ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    runs-on: macos-15
+    # The arm64 macOS hosted pool has been failing to provision runners.
+    # Use the Intel pool as a temporary workaround.
+    runs-on: macos-15-intel
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
