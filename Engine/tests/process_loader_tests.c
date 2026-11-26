@@ -60,8 +60,8 @@ static void buildExeFSPFS0(uint8_t *pfs, size_t size,
     memset(pfs,0,size);
     memcpy(pfs,"PFS0",4);
     put32(pfs+4,2);
-    put32(pfs+8,14);
-    const size_t dataOffset=0x10+2*0x18+14;
+    put32(pfs+8,15);
+    const size_t dataOffset=0x10+2*0x18+15;
     put64(pfs+0x10,0);
     put64(pfs+0x18,npdmSize);
     put32(pfs+0x20,0);
@@ -140,6 +140,6 @@ int main(void) {
         fprintf(stderr,"%d process-loader test(s) failed\n",failures);
         return 1;
     }
-    puts("NPDM + NSO main-thread preparation tests passed");
+    puts("PFS0 ExeFS + NPDM + NSO main-thread preparation tests passed");
     return 0;
 }
