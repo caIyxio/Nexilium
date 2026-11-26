@@ -28,8 +28,8 @@ int NXCPUSelfTest(void) {
         UINT32_C(0xD2800540),
         UINT32_C(0x91002001),
         UINT32_C(0xF100C422),
-        UINT32_C(0xF9000002),
-        UINT32_C(0xF9400003)
+        UINT32_C(0xF9000082),
+        UINT32_C(0xF9400083)
     };
     if (!NXEngineLoadBytes(&engine, codeBase, program, sizeof(program))) {
         NXEngineDestroy(&engine);
