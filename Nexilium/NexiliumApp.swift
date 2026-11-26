@@ -16,6 +16,9 @@ struct NexiliumApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onAppear {
+                    LandscapeOrientationController().setLandscape()
+                }
         }
     }
 }
@@ -25,6 +28,6 @@ final class NexiliumAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
-        [.portrait, .landscapeLeft, .landscapeRight]
+        .landscape
     }
 }
