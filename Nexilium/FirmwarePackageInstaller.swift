@@ -8,6 +8,16 @@ struct FirmwareInstallSummary: Codable {
     let metadataNcaCount: Int
     let totalBytes: UInt64
     let files: [FirmwareFileRecord]
+    let systemMenuAssets: FirmwareSystemMenuAssets?
+    let systemMenuExtractionIssue: String?
+}
+
+struct FirmwareSystemMenuAssets: Codable {
+    let ncaPath: String
+    let titleID: UInt64
+    let mainNSOPath: String
+    let npdmPath: String
+    let mainNSOBytes: UInt64
 }
 
 struct FirmwareFileRecord: Codable {
@@ -232,13 +242,22 @@ enum FirmwarePackageInstaller {
             guard !records.isEmpty else { throw FirmwarePackageError.noNCAContent }
             guard metadataCount > 0 else { throw FirmwarePackageError.missingContentMetadata }
 
+            let systemMenuResult = try extractSystemMenuAssets(
+                records: records,
+                stagingDirectory: staging,
+                headerKey: headerKey,
+                prodKeysURL: prodKeysURL
+            )
+
             let summary = FirmwareInstallSummary(
                 archiveName: archiveURL.lastPathComponent,
                 installedAt: Date(),
                 ncaCount: records.count,
                 metadataNcaCount: metadataCount,
                 totalBytes: totalBytes,
-                files: records.sorted { $0.path < $1.path }
+                files: records.sorted { $0.path < $1.path },
+                systemMenuAssets: systemMenuResult.assets,
+                systemMenuExtractionIssue: systemMenuResult.issue
             )
             let manifestURL = staging.appendingPathComponent("manifest.json")
             let encoder = JSONEncoder()
@@ -271,6 +290,70 @@ enum FirmwarePackageInstaller {
             }
             throw FirmwarePackageError.extractionFailed(error.localizedDescription)
         }
+    }
+
+    private static let systemMenuTitleID: UInt64 = 0x0100000000001000
+
+    private static func extractSystemMenuAssets(
+        records: [FirmwareFileRecord],
+        stagingDirectory: URL,
+        headerKey: Data,
+        prodKeysURL: URL
+    ) throws -> (assets: FirmwareSystemMenuAssets?, issue: String?) {
+        let candidates = records.filter {
+            $0.contentType == 0 && $0.programID == systemMenuTitleID
+        }
+        guard !candidates.isEmpty else {
+            return (nil, "No qlaunch program NCA (title ID 0100000000001000) was found.")
+        }
+
+        var lastIssue = "The qlaunch program NCA has no supported PFS0 ExeFS section."
+        for candidate in candidates {
+            let ncaURL = stagingDirectory.appendingPathComponent(candidate.path)
+            let header: NCAHeaderInfo
+            do {
+                header = try NCAHeaderDecoder.decode(fileURL: ncaURL, headerKey: headerKey)
+            } catch {
+                lastIssue = error.localizedDescription
+                continue
+            }
+
+            for section in header.sections where
+                section.partitionType == 1 && section.fileSystemType == 2 {
+                do {
+                    let program = try NCAProgramImageReader.read(
+                        from: ncaURL,
+                        section: section,
+                        header: header,
+                        prodKeysURL: prodKeysURL
+                    )
+                    let outputDirectory = stagingDirectory
+                        .appendingPathComponent("system-menu", isDirectory: true)
+                    try FileManager.default.createDirectory(
+                        at: outputDirectory,
+                        withIntermediateDirectories: true
+                    )
+                    let mainURL = outputDirectory.appendingPathComponent("main.nso")
+                    let npdmURL = outputDirectory.appendingPathComponent("main.npdm")
+                    try program.mainNSO.write(to: mainURL, options: .atomic)
+                    try program.npdm.write(to: npdmURL, options: .atomic)
+
+                    return (
+                        FirmwareSystemMenuAssets(
+                            ncaPath: candidate.path,
+                            titleID: program.metadata.titleID,
+                            mainNSOPath: "system-menu/main.nso",
+                            npdmPath: "system-menu/main.npdm",
+                            mainNSOBytes: UInt64(program.mainNSO.count)
+                        ),
+                        nil
+                    )
+                } catch {
+                    lastIssue = error.localizedDescription
+                }
+            }
+        }
+        return (nil, lastIssue)
     }
 
     private static func loadHeaderKey(at url: URL) throws -> Data {
