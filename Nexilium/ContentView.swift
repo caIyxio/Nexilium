@@ -22,9 +22,7 @@ struct ContentView: View {
             }
 
             NavigationStack {
-                Color(uiColor: .systemBackground)
-                    .navigationTitle("Settings")
-                    .navigationBarTitleDisplayMode(.large)
+                SettingsView()
             }
             .tabItem {
                 Label("Settings", systemImage: "gearshape")
