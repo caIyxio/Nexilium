@@ -1,99 +1,92 @@
 import SwiftUI
+import LucideSwift
 
 struct ConsoleHomeView: View {
+    var onFirmware: (() -> Void)? = nil
     var onExit: (() -> Void)? = nil
     @State private var showingMiiCreator = false
-    @State private var selectedSection: ConsoleSection?
+    @State private var showingSettings = false
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.10, green: 0.13, blue: 0.19), Color(red: 0.035, green: 0.045, blue: 0.07)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                Color(red: 0.91, green: 0.92, blue: 0.94).ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 26) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                VStack(spacing: 0) {
+                    HStack {
                         Text("NEXILIUM")
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                             .tracking(3)
-                            .foregroundStyle(.white.opacity(0.65))
-                        Text("Home")
-                            .font(.system(size: 34, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color(red: 0.28, green: 0.38, blue: 0.52))
+                        Spacer()
+                        Text("HOME")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(1.8)
+                            .foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    HStack(spacing: 18) {
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 27))
-                            .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 34)
+                    .padding(.top, 10)
+
+                    Spacer(minLength: 12)
+
+                    HStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 9) {
+                            Text("Games")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.primary.opacity(0.8))
+                            Text("No games installed")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 190, alignment: .leading)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 34)
+
+                    Spacer(minLength: 16)
+
+                    HStack(spacing: 0) {
+                        menuButton("Mii Creator", icon: .smile) { showingMiiCreator = true }
+                        menuButton("Firmware", icon: .folderDown) { onFirmware?() }
+                        menuButton("Controllers", icon: .gamepad2) { showingSettings = true }
+                        menuButton("Settings", icon: .settings) { showingSettings = true }
                         if let onExit {
-                            Button(action: onExit) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(10)
-                                    .background(.white.opacity(0.12), in: Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Exit system menu")
+                            menuButton("Exit", icon: .power) { onExit() }
                         }
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(.white.opacity(0.78), in: Capsule())
+                    .overlay(Capsule().stroke(.white, lineWidth: 1))
+                    .padding(.horizontal, 34)
+                    .padding(.bottom, 18)
                 }
-
-                Spacer(minLength: 0)
-
-                Text("GAMES")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(2)
-                    .foregroundStyle(.white.opacity(0.5))
-
-                HStack(spacing: 16) {
-                    ConsoleTile(title: "Mii Creator", subtitle: "Create and manage Miis", symbol: "face.smiling", tint: Color(red: 0.22, green: 0.58, blue: 0.85)) {
-                        showingMiiCreator = true
-                    }
-                    ConsoleTile(title: "Album", subtitle: "Capture gallery", symbol: "photo.on.rectangle", tint: Color(red: 0.45, green: 0.42, blue: 0.78)) {
-                        selectedSection = .album
-                    }
-                    ConsoleTile(title: "Controllers", subtitle: "Manage controllers", symbol: "gamecontroller", tint: Color(red: 0.20, green: 0.62, blue: 0.53)) {
-                        selectedSection = .controllers
-                    }
-                    ConsoleTile(title: "Settings", subtitle: "Console settings", symbol: "gearshape", tint: Color(red: 0.43, green: 0.48, blue: 0.56)) {
-                        selectedSection = .settings
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                HStack {
-                    Label("Nexilium system environment", systemImage: "cpu")
-                    Spacer()
-                    Text("EARLY DEVELOPMENT")
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(1.3)
-                }
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.48))
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
-            .padding(.horizontal, 34)
-            .padding(.top, 28)
-            .padding(.bottom, 22)
         }
+        .preferredColorScheme(.light)
         .fullScreenCover(isPresented: $showingMiiCreator) {
-            NavigationStack {
-                MiiCreatorView()
+            NavigationStack { MiiCreatorView() }
+        }
+        .fullScreenCover(isPresented: $showingSettings) {
+            NavigationStack { SettingsView() }
+        }
+    }
+
+    private func menuButton(_ title: String, icon: LucideIconName, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 7) {
+                LucideIcon(icon)
+                    .frame(width: 23, height: 23)
+                Text(title)
+                    .font(.system(size: 10, weight: .medium))
             }
+            .foregroundStyle(Color(red: 0.35, green: 0.43, blue: 0.54))
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
-        .alert(item: $selectedSection) { section in
-            Alert(
-                title: Text(section.title),
-                message: Text(section.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
+        .buttonStyle(.plain)
     }
 }
 
