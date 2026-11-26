@@ -25,19 +25,19 @@ static void buildNPDM(uint8_t *image, size_t size) {
     image[0x0F]=0;
     put32(image+0x18,1);
     put32(image+0x1C,0x4000);
-    put32(image+0x70,0x280);
+    put32(image+0x70,0x2C0);
     put32(image+0x74,0x80);
-    put32(image+0x78,0x200);
-    put32(image+0x7C,0x80);
+    put32(image+0x78,0x80);
+    put32(image+0x7C,0x240);
 
-    put32(image+0x200+0x200,UINT32_C(0x44494341));
-    put32(image+0x200+0x204,0x40);
-    put32(image+0x200+0x20C,1);
-    put64(image+0x200+0x210,0x0100000000001000);
-    put64(image+0x200+0x218,0x0100000000001000);
+    put32(image+0x80+0x200,UINT32_C(0x44494341));
+    put32(image+0x80+0x204,0x40);
+    put32(image+0x80+0x20C,1);
+    put64(image+0x80+0x210,0x0100000000001000);
+    put64(image+0x80+0x218,0x0100000000001000);
 
-    put32(image+0x280,UINT32_C(0x30494341));
-    put64(image+0x280+0x10,0x0100000000001000);
+    put32(image+0x2C0,UINT32_C(0x30494341));
+    put64(image+0x2C0+0x10,0x0100000000001000);
     put32(image+0x280+0x28,0x38);
     put32(image+0x280+0x2C,0);
     put32(image+0x280+0x30,0x38);
@@ -45,7 +45,7 @@ static void buildNPDM(uint8_t *image, size_t size) {
 }
 
 static void testValidNPDM(void) {
-    uint8_t image[0x300];
+    uint8_t image[0x400];
     buildNPDM(image,sizeof(image));
     NXNPDMView view;
     CHECK(NXEngineOpenNPDM(image,sizeof(image),&view));
@@ -67,7 +67,7 @@ static void testRejectsMalformedNPDM(void) {
     CHECK(!NXEngineOpenNPDM(image,sizeof(image),&view));
 
     buildNPDM(image,sizeof(image));
-    put32(image+0x200+0x200,0);
+    put32(image+0x80+0x200,0);
     CHECK(!NXEngineOpenNPDM(image,sizeof(image),&view));
 
     buildNPDM(image,sizeof(image));
