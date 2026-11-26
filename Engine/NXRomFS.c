@@ -323,7 +323,7 @@ static bool findDirectoryPath(const NXRomFSView *view, const char *path,
 
         if (*cursor == '/') {
             ++cursor;
-            if (*cursor == '\0' || *cursor == '/') return false;
+            if (*cursor == '/') return false;
         }
     }
 
