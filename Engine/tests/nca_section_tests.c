@@ -64,16 +64,16 @@ static void testValidLayout(void) {
     CHECK(section.index == 0);
     CHECK(section.byteOffset == 6u * 0x200u);
     CHECK(section.byteSize == 4u * 0x200u);
-    CHECK(section.fsType == 0);
-    CHECK(section.hashType == 3);
+    CHECK(section.partitionType == 0);
+    CHECK(section.fileSystemType == 3);
     CHECK(section.encryptionType == 3);
 
     CHECK(NXNCAGetSectionInfo(&layout, 1, &section));
     CHECK(section.present);
     CHECK(section.byteOffset == 10u * 0x200u);
     CHECK(section.byteSize == 2u * 0x200u);
-    CHECK(section.fsType == 1);
-    CHECK(section.hashType == 2);
+    CHECK(section.partitionType == 1);
+    CHECK(section.fileSystemType == 2);
     CHECK(section.encryptionType == 1);
 
     CHECK(NXNCAGetSectionInfo(&layout, 2, &section));
