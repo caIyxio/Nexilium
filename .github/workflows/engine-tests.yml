@@ -23,6 +23,6 @@ jobs:
             Engine/Arm64/exec_fpsimd.c \
             Engine/Arm64/sysreg.c \
             Engine/tests/engine_smoke.c \
-            -lm -o engine-smoke
+            -lm -latomic -o engine-smoke
       - name: Run CPU and memory smoke test
         run: ./engine-smoke
