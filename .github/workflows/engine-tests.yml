@@ -70,3 +70,14 @@ jobs:
             -o ivfc-romfs-tests
       - name: Run IVFC and RomFS integration tests
         run: ./ivfc-romfs-tests
+
+      - name: Compile NCA section table tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine \
+            Engine/NXNCA.c \
+            Engine/tests/nca_section_tests.c \
+            -o nca-section-tests
+      - name: Run NCA section table tests
+        run: ./nca-section-tests
