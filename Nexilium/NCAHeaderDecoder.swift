@@ -14,6 +14,8 @@ struct NCASectionInfo: Codable {
     let ctrUpperIV: [UInt8]
     let ivfcDataOffset: UInt64?
     let ivfcDataSize: UInt64?
+    let pfs0DataOffset: UInt64?
+    let pfs0DataSize: UInt64?
 }
 
 struct NCAHeaderInfo: Codable {
@@ -37,6 +39,7 @@ enum NCAHeaderError: LocalizedError {
     case invalidContentSize
     case invalidSectionTable
     case invalidIVFC
+    case invalidPFS0
 
     var errorDescription: String? {
         switch self {
@@ -54,6 +57,8 @@ enum NCAHeaderError: LocalizedError {
             return "The NCA header contains an invalid or unsupported section table."
         case .invalidIVFC:
             return "An NCA RomFS section has invalid IVFC metadata or level bounds."
+        case .invalidPFS0:
+            return "An NCA PartitionFS section has invalid PFS0 metadata or section bounds."
         }
     }
 }
@@ -142,6 +147,9 @@ enum NCAHeaderDecoder {
 
             var ivfcDataOffset: UInt64?
             var ivfcDataSize: UInt64?
+            var pfs0DataOffset: UInt64?
+            var pfs0DataSize: UInt64?
+
             if nativeSection.fsType == 0 && nativeSection.hashType == 3 {
                 var ivfcView = NXIVFCView()
                 var dataOffset = 0
@@ -163,6 +171,18 @@ enum NCAHeaderDecoder {
                 guard ivfcValid else { throw NCAHeaderError.invalidIVFC }
                 ivfcDataOffset = UInt64(dataOffset)
                 ivfcDataSize = UInt64(dataSize)
+            } else if nativeSection.fsType == 1 && nativeSection.hashType == 2 {
+                // The PFS0 superblock begins at FS-header + 0x8. Its
+                // pfs0_offset and pfs0_size fields are at superblock +0x38/+0x40.
+                let pfsOffset = readUInt64LE(decrypted, at: fsHeaderOffset + 0x40)
+                let pfsSize = readUInt64LE(decrypted, at: fsHeaderOffset + 0x48)
+                guard pfsSize > 0,
+                      pfsOffset <= nativeSection.byteSize,
+                      pfsSize <= nativeSection.byteSize - pfsOffset else {
+                    throw NCAHeaderError.invalidPFS0
+                }
+                pfs0DataOffset = pfsOffset
+                pfs0DataSize = pfsSize
             }
 
             sections.append(NCASectionInfo(
@@ -177,7 +197,9 @@ enum NCAHeaderDecoder {
                 metadataHashType: nativeSection.metadataHashType,
                 ctrUpperIV: ctrUpperIV,
                 ivfcDataOffset: ivfcDataOffset,
-                ivfcDataSize: ivfcDataSize
+                ivfcDataSize: ivfcDataSize,
+                pfs0DataOffset: pfs0DataOffset,
+                pfs0DataSize: pfs0DataSize
             ))
         }
 
