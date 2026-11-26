@@ -88,6 +88,15 @@ static void testRomFSMountAndRead(void) {
     NXVFSFile file;
     CHECK(NXVFSOpenFile(&vfs,"romfs","/romfs/boot.bin",&file));
     CHECK(file.size==3);
+    NXVFSDirectoryItem directoryItem;
+    CHECK(NXVFSReadDirectory(&vfs,"romfs","/",0,&directoryItem));
+    CHECK(directoryItem.isDirectory);
+    CHECK(directoryItem.nameLength==5);
+    CHECK(memcmp(directoryItem.name,"romfs",5)==0);
+    CHECK(NXVFSReadDirectory(&vfs,"romfs","/romfs/",0,&directoryItem));
+    CHECK(!directoryItem.isDirectory);
+    CHECK(directoryItem.nameLength==8);
+    CHECK(memcmp(directoryItem.name,"boot.bin",8)==0);
     uint8_t output[3]={0};
     size_t bytesRead=0;
     CHECK(NXVFSReadFile(&file,0,output,sizeof(output),&bytesRead));
@@ -110,6 +119,11 @@ static void testPFS0MountAndRead(void) {
     CHECK(NXVFSOpenFile(&vfs,"exefs","main.npdm",&file));
     CHECK(file.size==4);
     CHECK(memcmp(file.bytes,"META",4)==0);
+    NXVFSDirectoryItem directoryItem;
+    CHECK(NXVFSReadDirectory(&vfs,"exefs","/",0,&directoryItem));
+    CHECK(!directoryItem.isDirectory);
+    CHECK(directoryItem.nameLength==9);
+    CHECK(memcmp(directoryItem.name,"main.npdm",9)==0);
 
     uint8_t output[8]={0};
     size_t bytesRead=0;
