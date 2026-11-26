@@ -299,3 +299,96 @@ bool NXEngineRomFSGetFile(const NXRomFSView *view, const char *path,
         directoryOffset = childOffset;
     }
 }
+
+static bool findDirectoryPath(const NXRomFSView *view, const char *path,
+                              uint32_t *directoryOffset) {
+    if (!view || !path || !directoryOffset) return false;
+    const char *cursor = path;
+    while (*cursor == '/') ++cursor;
+    uint32_t current = 0;
+
+    while (*cursor != '\0') {
+        const char *component = cursor;
+        while (*cursor != '\0' && *cursor != '/') ++cursor;
+        const size_t length = (size_t)(cursor - component);
+        if (length == 0 || length > UINT32_MAX ||
+            (length == 1 && component[0] == '.') ||
+            (length == 2 && component[0] == '.' && component[1] == '.'))
+            return false;
+
+        uint32_t child = NX_ROMFS_NONE;
+        if (!findDirectory(view, current, component, length, &child))
+            return false;
+        current = child;
+
+        if (*cursor == '/') {
+            ++cursor;
+            if (*cursor == '\0' || *cursor == '/') return false;
+        }
+    }
+
+    *directoryOffset = current;
+    return true;
+}
+
+bool NXEngineRomFSGetDirectoryItem(const NXRomFSView *view,
+                                   const char *path, size_t index,
+                                   NXRomFSDirectoryItem *item) {
+    if (!view || !view->image || !path || !item) return false;
+
+    uint32_t directoryOffset = 0;
+    if (!findDirectoryPath(view, path, &directoryOffset)) return false;
+
+    NXRomFSDirectoryEntry directory;
+    if (!readDirectory(view, directoryOffset, &directory)) return false;
+
+    size_t currentIndex = 0;
+    uint32_t offset = directory.childDir;
+    const size_t maxDirectories =
+        view->dirTableSize / NX_ROMFS_DIR_ENTRY_SIZE + 1u;
+
+    for (size_t step = 0;
+         offset != NX_ROMFS_NONE && step < maxDirectories; ++step) {
+        NXRomFSDirectoryEntry child;
+        if (!readDirectory(view, offset, &child) ||
+            child.parent != directoryOffset)
+            return false;
+        if (currentIndex == index) {
+            item->name = (const char *)child.name;
+            item->nameLength = child.nameLength;
+            item->isDirectory = true;
+            item->size = 0;
+            return true;
+        }
+        ++currentIndex;
+        offset = child.sibling;
+    }
+    if (offset != NX_ROMFS_NONE) return false;
+
+    offset = directory.childFile;
+    const size_t maxFiles =
+        view->fileTableSize / NX_ROMFS_FILE_ENTRY_SIZE + 1u;
+
+    for (size_t step = 0; offset != NX_ROMFS_NONE && step < maxFiles; ++step) {
+        NXRomFSFileEntry child;
+        if (!readFile(view, offset, &child) ||
+            child.parent != directoryOffset)
+            return false;
+        if (child.dataOffset > view->imageSize - view->fileDataOffset ||
+            child.dataSize > view->imageSize - view->fileDataOffset -
+                             (size_t)child.dataOffset ||
+            child.dataSize > (uint64_t)SIZE_MAX)
+            return false;
+
+        if (currentIndex == index) {
+            item->name = (const char *)child.name;
+            item->nameLength = child.nameLength;
+            item->isDirectory = false;
+            item->size = (size_t)child.dataSize;
+            return true;
+        }
+        ++currentIndex;
+        offset = child.sibling;
+    }
+    return false;
+}
