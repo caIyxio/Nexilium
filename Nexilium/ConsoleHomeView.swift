@@ -173,7 +173,6 @@ struct MiiCreatorView: View {
     @State private var hairColor = "Brown"
     @State private var eyes = "Default"
     @State private var mouth = "Smile"
-    @State private var showingSaved = false
 
     private var savedProfiles: [MiiProfile] {
         (try? JSONDecoder().decode([MiiProfile].self, from: Data(savedProfilesData.utf8))) ?? []
@@ -373,6 +372,11 @@ private struct MiiAvatarPreview: View {
     }
 
     private var hairShape: some Shape {
-        UnevenRoundedRectangle(topLeadingRadius: hair == "Spiky" ? 2 : 22, topTrailingRadius: hair == "Spiky" ? 2 : 22, bottomLeadingRadius: 8, bottomTrailingRadius: 8)
+        UnevenRoundedRectangle(cornerRadii: RectangleCornerRadii(
+            topLeading: hair == "Spiky" ? 2 : 22,
+            bottomLeading: 8,
+            bottomTrailing: 8,
+            topTrailing: hair == "Spiky" ? 2 : 22
+        ))
     }
 }
