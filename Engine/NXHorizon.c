@@ -277,6 +277,17 @@ static uint64_t countFilteredDirectoryItems(const Machine *machine,
     return count;
 }
 
+static uint64_t mountedImageSize(const Machine *machine,
+                                    const char *mountName) {
+    if (!machine || !mountName) return 0;
+    for (size_t i = 0; i < NX_VFS_MAX_MOUNTS; ++i) {
+        const NXVFSMount *mount = &machine->vfs.mounts[i];
+        if (mount->active && strcmp(mount->name, mountName) == 0)
+            return (uint64_t)mount->imageSize;
+    }
+    return 0;
+}
+
 static bool readGuestCString(CPU *cpu, uint64_t address,
                              char *destination, size_t capacity) {
     if (!destination || capacity < 2) return false;
@@ -567,6 +578,31 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
                     &engine->machine, session->mountName, path, filterFlags
                 );
                 result = movedHandle ? NX_RESULT_SUCCESS : NX_RESULT_NOT_FOUND;
+            }
+        } else if (methodID == 10 && rawSize >= 16) { /* Commit: read-only no-op. */
+            result = NX_RESULT_SUCCESS;
+        } else if ((methodID == 11 || methodID == 12) && rawSize >= 16) {
+            /* GetFreeSpaceSize / GetTotalSpaceSize */
+            uint64_t pathAddress = 0, pathSize = 0;
+            char path[0x302];
+            if (hipcGetBufferDescriptor(buffer, 0x9u, 0,
+                                        &pathAddress, &pathSize) &&
+                readGuestPath(&engine->cpu, pathAddress, pathSize,
+                              path, sizeof(path))) {
+                NXVFSFile file;
+                const bool exists =
+                    NXVFSOpenFile(&engine->machine.vfs,
+                                  session->mountName, path, &file) ||
+                    NXVFSIsDirectory(&engine->machine.vfs,
+                                     session->mountName, path);
+                if (exists) {
+                    const uint64_t size = methodID == 11
+                        ? 0
+                        : mountedImageSize(&engine->machine, session->mountName);
+                    writeU64LE(extraData, size);
+                    extraDataSize = sizeof(size);
+                    result = NX_RESULT_SUCCESS;
+                }
             }
         }
     } else if (session->service == NX_SERVICE_DIRECTORY) {
