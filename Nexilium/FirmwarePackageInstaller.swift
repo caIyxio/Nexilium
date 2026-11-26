@@ -14,6 +14,10 @@ struct FirmwareFileRecord: Codable {
     let path: String
     let byteCount: UInt64
     let isMetadata: Bool
+    let contentType: UInt8
+    let keyGeneration: UInt8
+    let programID: UInt64
+    let rightsID: String
 }
 
 enum FirmwarePackageError: LocalizedError {
@@ -117,7 +121,12 @@ enum FirmwarePackageInstaller {
         return count
     }
 
-    static func install(archiveURL: URL, storageDirectory: URL) throws -> FirmwareInstallSummary {
+    static func install(
+        archiveURL: URL,
+        prodKeysURL: URL,
+        storageDirectory: URL
+    ) throws -> FirmwareInstallSummary {
+        let headerKey = try loadHeaderKey(at: prodKeysURL)
         let archive: Archive
         do {
             archive = try Archive(url: archiveURL, accessMode: .read)
@@ -185,13 +194,36 @@ enum FirmwarePackageInstaller {
                     throw FirmwarePackageError.extractionFailed("An extracted NCA had an unexpected size.")
                 }
 
-                let isMetadata = lowerPath.hasSuffix(".cnmt.nca")
+                let headerInfo: NCAHeaderInfo
+                do {
+                    headerInfo = try NCAHeaderDecoder.decode(
+                        fileURL: outputURL,
+                        headerKey: headerKey
+                    )
+                } catch {
+                    throw FirmwarePackageError.extractionFailed(
+                        "\(entry.path): \(error.localizedDescription)"
+                    )
+                }
+                guard headerInfo.contentSize == size else {
+                    throw FirmwarePackageError.extractionFailed(
+                        "\(entry.path): header size does not match archive entry size."
+                    )
+                }
+
+                // NCA ContentType 1 is Meta. Firmware ZIP filenames do not
+                // reliably indicate which NCA contains CNMT metadata.
+                let isMetadata = headerInfo.contentType == 1
                 if isMetadata { metadataCount += 1 }
                 totalBytes += size
                 records.append(FirmwareFileRecord(
                     path: entry.path,
                     byteCount: size,
-                    isMetadata: isMetadata
+                    isMetadata: isMetadata,
+                    contentType: headerInfo.contentType,
+                    keyGeneration: headerInfo.keyGeneration,
+                    programID: headerInfo.programID,
+                    rightsID: headerInfo.rightsID
                 ))
             }
 
@@ -237,6 +269,40 @@ enum FirmwarePackageInstaller {
             }
             throw FirmwarePackageError.extractionFailed(error.localizedDescription)
         }
+    }
+
+    private static func loadHeaderKey(at url: URL) throws -> Data {
+        let text = try String(contentsOf: url, encoding: .utf8)
+        for rawLine in text.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix("#"),
+                  let separator = line.firstIndex(of: "=") else { continue }
+            let name = line[..<separator]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard name == "header_key" else { continue }
+            let value = line[line.index(after: separator)...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard value.count == 64,
+                  value.unicodeScalars.allSatisfy({
+                      CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains($0)
+                  }) else {
+                throw FirmwarePackageError.invalidKeys("header_key must be 64 hexadecimal characters.")
+            }
+
+            var bytes = Data()
+            var index = value.startIndex
+            while index < value.endIndex {
+                let next = value.index(index, offsetBy: 2)
+                guard let byte = UInt8(value[index..<next], radix: 16) else {
+                    throw FirmwarePackageError.invalidKeys("header_key contains invalid hexadecimal data.")
+                }
+                bytes.append(byte)
+                index = next
+            }
+            return bytes
+        }
+        throw FirmwarePackageError.invalidKeys("header_key is missing from prod.keys.")
     }
 
     private static func isSafeRelativePath(_ path: String) -> Bool {
