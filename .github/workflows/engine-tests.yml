@@ -59,6 +59,19 @@ jobs:
       - name: Run RomFS regression tests
         run: ./romfs-tests
 
+      - name: Compile read-only VFS tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine \
+            Engine/NXVFS.c \
+            Engine/NXRomFS.c \
+            Engine/NXPFS0.c \
+            Engine/tests/vfs_tests.c \
+            -o vfs-tests
+      - name: Run read-only VFS tests
+        run: ./vfs-tests
+
       - name: Compile IVFC and RomFS integration tests
         run: |
           clang -O2 -std=gnu11 -D_GNU_SOURCE \
