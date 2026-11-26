@@ -97,3 +97,19 @@ bool NXEnginePFS0GetFile(const NXPFS0View *view, const char *name,
     }
     return false;
 }
+
+bool NXEnginePFS0GetFileByIndex(const NXPFS0View *view, size_t index,
+                                NXPFS0File *file) {
+    if (!view || !view->image || !file || index >= view->fileCount)
+        return false;
+    const size_t entryOffset = view->entriesOffset + index * NX_PFS0_ENTRY_SIZE;
+    if (!rangeFits(entryOffset, NX_PFS0_ENTRY_SIZE, view->imageSize))
+        return false;
+    const uint8_t *entry = view->image + entryOffset;
+    const uint32_t nameOffset = readU32LE(entry + 16);
+    if (nameOffset >= view->stringTableSize) return false;
+    const char *name = (const char *)(
+        view->image + view->stringTableOffset + nameOffset
+    );
+    return NXEnginePFS0GetFile(view, name, file);
+}
