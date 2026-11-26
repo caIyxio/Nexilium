@@ -1,4 +1,5 @@
 #include "NXProcess.h"
+#include "NXPFS0.h"
 
 #include <stdint.h>
 #include <stdio.h>
