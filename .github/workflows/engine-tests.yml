@@ -1,0 +1,28 @@
+name: Engine Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  arm64-interpreter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the JIT-free AArch64 interpreter
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine -I Engine/Arm64 \
+            Engine/NXMachine.c \
+            Engine/NXCPU.c \
+            Engine/Arm64/cpu.c \
+            Engine/Arm64/decode.c \
+            Engine/Arm64/exec_fpsimd.c \
+            Engine/Arm64/sysreg.c \
+            Engine/tests/engine_smoke.c \
+            -lm -o engine-smoke
+      - name: Run CPU and memory smoke test
+        run: ./engine-smoke
