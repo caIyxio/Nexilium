@@ -829,7 +829,7 @@ static bool resolvePendingTable(NXEngine *engine,
                                 bool isRela) {
     const size_t entrySize = isRela ? 24u : 16u;
     if (tableSize == 0) return true;
-    if (tableSize % entrySize != 0 ||
+    if (tableSize > SIZE_MAX || tableSize % entrySize != 0 ||
         !addressInImage(module, tableAddress, (size_t)tableSize))
         return false;
 
@@ -856,6 +856,7 @@ static bool resolvePendingTable(NXEngine *engine,
         } else if (type == 257u) {
             uint64_t targetAddress = 0, implicitAddend = 0;
             if (addOverflowU64(module->loadBase, targetOffset, &targetAddress) ||
+                !addressInImage(module, targetAddress, sizeof(uint64_t)) ||
                 !readGuestU64(engine, targetAddress, &implicitAddend))
                 return false;
             addend = (int64_t)implicitAddend;
@@ -863,6 +864,7 @@ static bool resolvePendingTable(NXEngine *engine,
             uint64_t targetAddress = 0;
             uint8_t encoded[4];
             if (addOverflowU64(module->loadBase, targetOffset, &targetAddress) ||
+                !addressInImage(module, targetAddress, sizeof(encoded)) ||
                 !NXEngineReadBytes(engine, targetAddress, encoded, sizeof(encoded)))
                 return false;
             const uint32_t implicitAddend =
@@ -894,6 +896,7 @@ static bool resolvePendingTable(NXEngine *engine,
 bool NXNSORegistryResolvePending(NXEngine *engine,
                                  NXNSORegistry *registry) {
     if (!engine || !engine->initialized || !registry ||
+        registry->count > NX_NSO_MAX_MODULES ||
         registry->pendingRelocationsResolved)
         return false;
 
