@@ -109,7 +109,7 @@ struct ConsoleHomeView: View {
     }
 
     private var geometryWidth: CGFloat {
-        UIScreen.main.bounds.width
+        max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
     }
 
     private func menuIcon(_ item: HomeMenuItem, icon: String, tint: Color) -> some View {
