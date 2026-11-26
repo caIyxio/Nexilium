@@ -58,3 +58,15 @@ jobs:
             -o romfs-tests
       - name: Run RomFS regression tests
         run: ./romfs-tests
+
+      - name: Compile IVFC and RomFS integration tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine \
+            Engine/NXIVFC.c \
+            Engine/NXRomFS.c \
+            Engine/tests/ivfc_romfs_tests.c \
+            -o ivfc-romfs-tests
+      - name: Run IVFC and RomFS integration tests
+        run: ./ivfc-romfs-tests
