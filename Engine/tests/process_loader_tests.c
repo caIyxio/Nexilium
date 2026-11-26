@@ -129,6 +129,47 @@ static void testMOD0RelativeRelocation(void) {
     NXEngineDestroy(&engine);
 }
 
+static void buildRelrNSO(uint8_t *nso, size_t size) {
+    memset(nso,0,size);
+    memcpy(nso,"NSO0",4);
+    put32(nso+0x10,0x100);
+    put32(nso+0x14,0);
+    put32(nso+0x18,0x200);
+    uint8_t *text=nso+0x100;
+    put32(text+4,0x80);
+    put32(text+0x80,UINT32_C(0x30444F4D));
+    put32(text+0x84,0x40);
+
+    put64(text+0xC0,36); put64(text+0xC8,0x120); /* DT_RELR */
+    put64(text+0xD0,35); put64(text+0xD8,8);     /* DT_RELRSZ */
+    put64(text+0xE0,37); put64(text+0xE8,8);     /* DT_RELRENT */
+    put64(text+0xF0,0);  put64(text+0xF8,0);     /* DT_NULL */
+
+    put64(text+0x120,0x150); /* Direct RELR offset. */
+    put64(text+0x150,0x1234); /* Implicit addend. */
+}
+
+static void testMOD0RELRRelativeRelocation(void) {
+    uint8_t nso[0x300];
+    buildRelrNSO(nso,sizeof(nso));
+
+    NXEngine engine;
+    CHECK(NXEngineInit(&engine));
+    NXLoadedNSO loaded;
+    const uint64_t loadBase=UINT64_C(0x7400000000);
+    CHECK(NXEngineLoadNSO(&engine,nso,sizeof(nso),loadBase,&loaded));
+    CHECK(loaded.hasModuleHeader);
+    CHECK(loaded.relativeRelocationCount==1);
+    CHECK(loaded.unsupportedRelocationCount==0);
+
+    uint64_t relocated=0;
+    CHECK(NXEngineReadBytes(
+        &engine,loadBase+0x150,&relocated,sizeof(relocated)
+    ));
+    CHECK(relocated==loadBase+0x1234);
+    NXEngineDestroy(&engine);
+}
+
 static void testUnsupportedMOD0RelocationIsReported(void) {
     uint8_t nso[0x300];
     buildRelocatableNSO(nso,sizeof(nso),257u); /* R_AARCH64_ABS64 needs symbol lookup. */
@@ -198,6 +239,7 @@ static void testRejectUnsupportedProcess(void) {
 
 int main(void) {
     testMOD0RelativeRelocation();
+    testMOD0RELRRelativeRelocation();
     testUnsupportedMOD0RelocationIsReported();
     testPrepareMainThread();
     testRejectUnsupportedProcess();
