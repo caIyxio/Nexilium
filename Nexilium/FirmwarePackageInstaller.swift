@@ -18,6 +18,7 @@ struct FirmwareFileRecord: Codable {
     let keyGeneration: UInt8
     let programID: UInt64
     let rightsID: String
+    let sections: [NCASectionInfo]
 }
 
 enum FirmwarePackageError: LocalizedError {
@@ -223,7 +224,8 @@ enum FirmwarePackageInstaller {
                     contentType: headerInfo.contentType,
                     keyGeneration: headerInfo.keyGeneration,
                     programID: headerInfo.programID,
-                    rightsID: headerInfo.rightsID
+                    rightsID: headerInfo.rightsID,
+                    sections: headerInfo.sections
                 ))
             }
 
