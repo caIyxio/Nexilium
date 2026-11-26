@@ -12,7 +12,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 }
 
 struct SettingsView: View {
-    @Environment(\\.dismiss) private var dismiss
+    @Environment(\.dismiss) private var dismiss
     @State private var selection: SettingsCategory?
 
     init(initialSelection: SettingsCategory = .graphics) {
