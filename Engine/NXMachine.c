@@ -257,6 +257,18 @@ NXCPUResult NXEngineRun(NXEngine *engine, uint64_t instructionBudget) {
     return NX_CPU_STEP_LIMIT;
 }
 
+bool NXEngineMountRomFS(NXEngine *engine, const char *mountName,
+                        const uint8_t *image, size_t imageSize) {
+    if (!engine || !engine->initialized) return false;
+    return NXVFSMountRomFS(&engine->machine.vfs, mountName, image, imageSize);
+}
+
+bool NXEngineMountPFS0(NXEngine *engine, const char *mountName,
+                       const uint8_t *image, size_t imageSize) {
+    if (!engine || !engine->initialized) return false;
+    return NXVFSMountPFS0(&engine->machine.vfs, mountName, image, imageSize);
+}
+
 void NXEngineClearException(NXEngine *engine) {
     if (engine) memset(&engine->machine.pendingException, 0,
                        sizeof(engine->machine.pendingException));
