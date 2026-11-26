@@ -25,6 +25,32 @@ typedef struct {
     ExcKind kind;
 } NXPendingException;
 
+typedef enum {
+    NX_SERVICE_NONE = 0,
+    NX_SERVICE_MANAGER,
+    NX_SERVICE_FSP,
+    NX_SERVICE_SETTINGS,
+    NX_SERVICE_PROCESS_MANAGER,
+    NX_SERVICE_APPLET,
+    NX_SERVICE_VIDEO,
+    NX_SERVICE_HID,
+    NX_SERVICE_TIME,
+    NX_SERVICE_NVDRV,
+    NX_SERVICE_CONTENT_MANAGER,
+    NX_SERVICE_LOADER
+} NXServiceKind;
+
+typedef struct {
+    uint32_t handle;
+    NXServiceKind service;
+    bool active;
+} NXSessionHandle;
+
+#define NX_MAX_SESSION_HANDLES 128
+#define NX_TLS_BASE UINT64_C(0x70000000)
+#define NX_TLS_SIZE 0x1000u
+#define NX_HIPC_TLS_OFFSET 0x80u
+
 typedef struct Machine {
     NXMemoryRegion regions[NX_MAX_MEMORY_REGIONS];
     size_t regionCount;
@@ -33,6 +59,9 @@ typedef struct Machine {
     uint64_t heapBase;
     uint64_t heapSize;
     bool processExited;
+    uint64_t tlsBase;
+    uint32_t nextHandle;
+    NXSessionHandle handles[NX_MAX_SESSION_HANDLES];
 } Machine;
 
 typedef struct {
