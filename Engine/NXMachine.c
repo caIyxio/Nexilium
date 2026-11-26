@@ -1,4 +1,5 @@
 #include "NXMachine.h"
+#include "NXHorizon.h"
 #include "Arm64/esr.h"
 #include "Arm64/mmu.h"
 #include <stdlib.h>
@@ -212,16 +213,32 @@ bool NXEngineLoadBytes(NXEngine *engine, uint64_t guestAddress,
 
 NXCPUResult NXEngineRun(NXEngine *engine, uint64_t instructionBudget) {
     if (!engine || !engine->initialized) return NX_CPU_INVALID_ARGUMENT;
+    if (engine->machine.processExited || engine->cpu.stop) return NX_CPU_HALTED;
     engine->machine.pendingException.valid = false;
     uint64_t executed = 0;
     while (executed < instructionBudget) {
         if (engine->machine.pendingException.valid) return NX_CPU_EXCEPTION;
-        if (engine->cpu.stop) return NX_CPU_HALTED;
+        if (engine->machine.processExited || engine->cpu.stop) return NX_CPU_HALTED;
+
         StepResult result = cpu_step(&engine->cpu);
         ++executed;
         engine->machine.timerTicks = engine->cpu.icount;
-        if (engine->machine.pendingException.valid) return NX_CPU_EXCEPTION;
-        if (result == STEP_HALT || engine->cpu.stop) return NX_CPU_HALTED;
+
+        if (engine->machine.pendingException.valid) {
+            const uint64_t syndrome = engine->machine.pendingException.syndrome;
+            const unsigned exceptionClass = (unsigned)((syndrome >> 26) & 0x3F);
+            if (exceptionClass == EC_SVC64 &&
+                NXHorizonDispatchSVC(engine, (uint16_t)(syndrome & 0xFFFF))) {
+                engine->machine.pendingException.valid = false;
+                if (engine->machine.processExited || engine->cpu.stop)
+                    return NX_CPU_HALTED;
+                continue;
+            }
+            return NX_CPU_EXCEPTION;
+        }
+
+        if (result == STEP_HALT || engine->cpu.stop ||
+            engine->machine.processExited) return NX_CPU_HALTED;
         if (engine->cpu.halted) return NX_CPU_WAITING;
     }
     return NX_CPU_STEP_LIMIT;
@@ -251,4 +268,12 @@ void cpu_unpack_spsr(CPU *cpu, u32 value) {
     unsigned mode = value & 0xf;
     cpu->el = (mode >> 2) & 3;
     cpu->sp_sel = mode & 1u;
+}
+
+/* SMCCC PSCI/secure-monitor calls are not implemented yet. Returning false
+   lets the CPU core raise an architecturally visible undefined exception. */
+bool smccc_conduit(CPU *cpu, bool is_hvc) {
+    (void)cpu;
+    (void)is_hvc;
+    return false;
 }
