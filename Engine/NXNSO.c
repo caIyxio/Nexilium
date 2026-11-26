@@ -83,6 +83,10 @@ static bool decodeLZ4Block(const uint8_t *source, size_t sourceSize,
     return input == sourceSize && output == destinationSize;
 }
 
+static uint16_t readU16LE(const uint8_t *bytes) {
+    return (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
+}
+
 static uint64_t readU64LE(const uint8_t *bytes) {
     return (uint64_t)readU32LE(bytes) |
            ((uint64_t)readU32LE(bytes + 4) << 32);
@@ -126,6 +130,80 @@ static bool writeGuestU64(NXEngine *engine, uint64_t address,
     for (size_t i = 0; i < sizeof(bytes); ++i)
         bytes[i] = (uint8_t)(value >> (i * 8));
     return NXEngineWriteBytes(engine, address, bytes, sizeof(bytes));
+}
+
+static bool resolveDynamicSymbol(NXEngine *engine, uint64_t loadBase,
+                                    uint64_t symbolTableAddress,
+                                    uint64_t symbolCount,
+                                    uint32_t symbolIndex,
+                                    uint64_t *symbolAddress) {
+    if (!symbolAddress) return false;
+    if (symbolIndex == 0) {
+        *symbolAddress = 0;
+        return true;
+    }
+    if (!engine || symbolTableAddress == 0 || symbolIndex >= symbolCount)
+        return false;
+
+    uint64_t entryOffset = 0, entryAddress = 0;
+    if ((uint64_t)symbolIndex > UINT64_MAX / 24u)
+        return false;
+    entryOffset = (uint64_t)symbolIndex * 24u;
+    if (addOverflowU64(symbolTableAddress, entryOffset, &entryAddress))
+        return false;
+
+    uint8_t symbol[24];
+    if (!NXEngineReadBytes(engine, entryAddress, symbol, sizeof(symbol)))
+        return false;
+    const uint16_t sectionIndex = readU16LE(symbol + 6);
+    const uint64_t value = readU64LE(symbol + 8);
+    if (sectionIndex == 0) return false; /* Undefined import: needs rtld. */
+    if (sectionIndex == UINT16_C(0xFFF1)) { /* SHN_ABS */
+        *symbolAddress = value;
+        return true;
+    }
+    return !addOverflowU64(loadBase, value, symbolAddress);
+}
+
+static bool applyAArch64AbsoluteRelocation(
+    NXEngine *engine, uint64_t loadBase, const NXLoadedNSO *image,
+    uint64_t targetOffset, uint32_t type, uint32_t symbolIndex,
+    int64_t addend, uint64_t symbolTableAddress, uint64_t symbolCount,
+    NXLoadedNSO *stats) {
+    uint64_t targetAddress = 0, symbolAddress = 0, value = 0;
+    if (addOverflowU64(loadBase, targetOffset, &targetAddress))
+        return false;
+
+    if (type == 257u) { /* R_AARCH64_ABS64 */
+        if (!addressInImage(image, targetAddress, 8) ||
+            !resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
+                                  symbolCount, symbolIndex, &symbolAddress) ||
+            !addSignedOffset(symbolAddress, addend, &value) ||
+            !writeGuestU64(engine, targetAddress, value))
+            return false;
+        ++stats->relativeRelocationCount;
+        return true;
+    }
+
+    if (type == 258u) { /* R_AARCH64_ABS32 */
+        uint8_t encoded[4];
+        if (!addressInImage(image, targetAddress, 4) ||
+            !resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
+                                  symbolCount, symbolIndex, &symbolAddress) ||
+            !addSignedOffset(symbolAddress, addend, &value) ||
+            value > UINT32_MAX)
+            return false;
+        const uint32_t value32 = (uint32_t)value;
+        encoded[0] = (uint8_t)value32;
+        encoded[1] = (uint8_t)(value32 >> 8);
+        encoded[2] = (uint8_t)(value32 >> 16);
+        encoded[3] = (uint8_t)(value32 >> 24);
+        if (!NXEngineWriteBytes(engine, targetAddress, encoded, sizeof(encoded)))
+            return false;
+        ++stats->relativeRelocationCount;
+        return true;
+    }
+    return false;
 }
 
 static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
