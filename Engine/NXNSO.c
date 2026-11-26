@@ -215,7 +215,8 @@ static bool applyAArch64AbsoluteRelocation(
 static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
                            const NXLoadedNSO *image,
                            uint64_t tableAddress, uint64_t tableSize,
-                           NXLoadedNSO *stats) {
+                           uint64_t symbolTableAddress,
+                           uint64_t symbolCount, NXLoadedNSO *stats) {
     if (tableSize == 0) return true;
     if (tableSize % 24u != 0 || tableSize > SIZE_MAX ||
         !addressInImage(image, tableAddress, (size_t)tableSize))
@@ -235,19 +236,26 @@ static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
         const uint32_t symbolIndex = (uint32_t)(info >> 32);
 
         if (type == 0) continue; /* R_AARCH64_NONE */
-        if (type != 1027u || symbolIndex != 0) {
+        if (type == 1027u) { /* R_AARCH64_RELATIVE */
+            if (symbolIndex != 0) {
+                ++stats->unsupportedRelocationCount;
+                continue;
+            }
+            uint64_t targetAddress = 0, relocatedValue = 0;
+            if (addOverflowU64(loadBase, targetOffset, &targetAddress) ||
+                !addressInImage(image, targetAddress, sizeof(uint64_t)) ||
+                !addSignedOffset(loadBase, addend, &relocatedValue) ||
+                !writeGuestU64(engine, targetAddress, relocatedValue))
+                return false;
+            ++stats->relativeRelocationCount;
+        } else if (type == 257u || type == 258u) {
+            if (!applyAArch64AbsoluteRelocation(
+                    engine, loadBase, image, targetOffset, type, symbolIndex,
+                    addend, symbolTableAddress, symbolCount, stats))
+                return false;
+        } else {
             ++stats->unsupportedRelocationCount;
-            continue;
         }
-
-        uint64_t targetAddress = 0;
-        uint64_t relocatedValue = 0;
-        if (addOverflowU64(loadBase, targetOffset, &targetAddress) ||
-            !addressInImage(image, targetAddress, sizeof(uint64_t)) ||
-            !addSignedOffset(loadBase, addend, &relocatedValue) ||
-            !writeGuestU64(engine, targetAddress, relocatedValue))
-            return false;
-        ++stats->relativeRelocationCount;
     }
     return true;
 }
@@ -255,7 +263,8 @@ static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
 static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
                           const NXLoadedNSO *image,
                           uint64_t tableAddress, uint64_t tableSize,
-                          NXLoadedNSO *stats) {
+                          uint64_t symbolTableAddress,
+                          uint64_t symbolCount, NXLoadedNSO *stats) {
     if (tableSize == 0) return true;
     if (tableSize % 16u != 0 || tableSize > SIZE_MAX ||
         !addressInImage(image, tableAddress, (size_t)tableSize))
@@ -273,21 +282,48 @@ static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
         const uint32_t type = (uint32_t)info;
         const uint32_t symbolIndex = (uint32_t)(info >> 32);
         if (type == 0) continue;
-        if (type != 1027u || symbolIndex != 0) {
-            ++stats->unsupportedRelocationCount;
-            continue;
-        }
-
         uint64_t targetAddress = 0;
-        uint64_t implicitAddend = 0;
-        uint64_t relocatedValue = 0;
-        if (addOverflowU64(loadBase, targetOffset, &targetAddress) ||
-            !addressInImage(image, targetAddress, sizeof(uint64_t)) ||
-            !readGuestU64(engine, targetAddress, &implicitAddend) ||
-            addOverflowU64(loadBase, implicitAddend, &relocatedValue) ||
-            !writeGuestU64(engine, targetAddress, relocatedValue))
+        if (addOverflowU64(loadBase, targetOffset, &targetAddress))
             return false;
-        ++stats->relativeRelocationCount;
+
+        if (type == 1027u) {
+            uint64_t implicitAddend = 0, relocatedValue = 0;
+            if (symbolIndex != 0) {
+                ++stats->unsupportedRelocationCount;
+                continue;
+            }
+            if (!addressInImage(image, targetAddress, 8) ||
+                !readGuestU64(engine, targetAddress, &implicitAddend) ||
+                addOverflowU64(loadBase, implicitAddend, &relocatedValue) ||
+                !writeGuestU64(engine, targetAddress, relocatedValue))
+                return false;
+            ++stats->relativeRelocationCount;
+        } else if (type == 257u) {
+            uint64_t implicitAddend = 0;
+            if (!addressInImage(image, targetAddress, 8) ||
+                !readGuestU64(engine, targetAddress, &implicitAddend))
+                return false;
+            if (!applyAArch64AbsoluteRelocation(
+                    engine, loadBase, image, targetOffset, type, symbolIndex,
+                    (int64_t)implicitAddend, symbolTableAddress,
+                    symbolCount, stats))
+                return false;
+        } else if (type == 258u) {
+            uint8_t encoded[4];
+            if (!addressInImage(image, targetAddress, 4) ||
+                !NXEngineReadBytes(engine, targetAddress, encoded, sizeof(encoded)))
+                return false;
+            const uint32_t implicitAddend =
+                (uint32_t)encoded[0] | ((uint32_t)encoded[1] << 8) |
+                ((uint32_t)encoded[2] << 16) | ((uint32_t)encoded[3] << 24);
+            if (!applyAArch64AbsoluteRelocation(
+                    engine, loadBase, image, targetOffset, type, symbolIndex,
+                    (int64_t)implicitAddend, symbolTableAddress,
+                    symbolCount, stats))
+                return false;
+        } else {
+            ++stats->unsupportedRelocationCount;
+        }
     }
     return true;
 }
