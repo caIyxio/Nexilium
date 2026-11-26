@@ -13,7 +13,10 @@ const char *NXCPUBackendName(void) {
 
 int NXCPUSelfTest(void) {
     NXEngine engine;
-    if (!NXEngineInit(&engine)) return 0;
+    if (!NXEngineInit(&engine)) {
+        fprintf(stderr, "CPU self-test: initial engine allocation failed\\n");
+        return 0;
+    }
 
     const uint64_t codeBase = 0x1000;
     const uint64_t dataBase = 0x2000;
@@ -21,6 +24,7 @@ int NXCPUSelfTest(void) {
                            NX_MEMORY_READ | NX_MEMORY_WRITE | NX_MEMORY_EXECUTE) ||
         !NXEngineMapMemory(&engine, dataBase, 0x1000,
                            NX_MEMORY_READ | NX_MEMORY_WRITE)) {
+        fprintf(stderr, "CPU self-test: base memory map failed\\n");
         NXEngineDestroy(&engine);
         return 0;
     }
@@ -35,6 +39,7 @@ int NXCPUSelfTest(void) {
         UINT32_C(0xF9400083)
     };
     if (!NXEngineLoadBytes(&engine, codeBase, program, sizeof(program))) {
+        fprintf(stderr, "CPU self-test: program copy failed\\n");
         NXEngineDestroy(&engine);
         return 0;
     }
@@ -69,10 +74,14 @@ int NXCPUSelfTest(void) {
 
     /* Exercise the real Horizon dispatch path: SetHeapSize then GetSystemTick. */
     NXEngine svcEngine;
-    if (!NXEngineInit(&svcEngine)) return 0;
+    if (!NXEngineInit(&svcEngine)) {
+        fprintf(stderr, "Horizon self-test: engine allocation failed\\n");
+        return 0;
+    }
     const uint64_t svcCodeBase = 0x4000;
     if (!NXEngineMapMemory(&svcEngine, svcCodeBase, 0x1000,
                            NX_MEMORY_READ | NX_MEMORY_WRITE | NX_MEMORY_EXECUTE)) {
+        fprintf(stderr, "Horizon self-test: code memory map failed\\n");
         NXEngineDestroy(&svcEngine);
         return 0;
     }
@@ -81,6 +90,7 @@ int NXCPUSelfTest(void) {
         UINT32_C(0xD40003C1)  /* SVC #0x1E: GetSystemTick */
     };
     if (!NXEngineLoadBytes(&svcEngine, svcCodeBase, svcProgram, sizeof(svcProgram))) {
+        fprintf(stderr, "Horizon self-test: program copy failed\\n");
         NXEngineDestroy(&svcEngine);
         return 0;
     }
@@ -136,7 +146,10 @@ int NXCPUSelfTest(void) {
 
     /* Load a compressed NSO text segment (one MOVZ instruction) and execute it. */
     NXEngine nsoEngine;
-    if (!NXEngineInit(&nsoEngine)) return 0;
+    if (!NXEngineInit(&nsoEngine)) {
+        fprintf(stderr, "NSO self-test: engine allocation failed\\n");
+        return 0;
+    }
     uint8_t nso[0x105] = {0};
     nso[0] = 'N'; nso[1] = 'S'; nso[2] = 'O'; nso[3] = '0';
     nso[0x0C] = 1; /* .text is LZ4-compressed. */
