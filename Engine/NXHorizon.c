@@ -132,6 +132,22 @@ static NXSessionHandle *findSession(Machine *machine, uint32_t handle) {
     return NULL;
 }
 
+static NXServiceKind serviceFromName(const char *name) {
+    if (!name) return NX_SERVICE_NONE;
+    if (strcmp(name, "fsp-srv") == 0) return NX_SERVICE_FSP;
+    if (strcmp(name, "set:sys") == 0) return NX_SERVICE_SETTINGS;
+    if (strcmp(name, "pm:shell") == 0 || strcmp(name, "pm:dmnt") == 0)
+        return NX_SERVICE_PROCESS_MANAGER;
+    if (strcmp(name, "appletOE") == 0) return NX_SERVICE_APPLET;
+    if (strcmp(name, "vi:u") == 0) return NX_SERVICE_VIDEO;
+    if (strcmp(name, "hid") == 0) return NX_SERVICE_HID;
+    if (strcmp(name, "time:u") == 0) return NX_SERVICE_TIME;
+    if (strcmp(name, "nvdrv") == 0) return NX_SERVICE_NVDRV;
+    if (strcmp(name, "ncm") == 0) return NX_SERVICE_CONTENT_MANAGER;
+    if (strcmp(name, "ldr:ro") == 0) return NX_SERVICE_LOADER;
+    return NX_SERVICE_NONE;
+}
+
 static uint32_t createSession(Machine *machine, NXServiceKind service) {
     if (!machine || service == NX_SERVICE_NONE) return 0;
     for (size_t i = 0; i < NX_MAX_SESSION_HANDLES; ++i) {
@@ -277,7 +293,7 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
             case 0: /* RegisterClient; caller PID is carried in the HIPC special header. */
                 result = NX_RESULT_SUCCESS;
                 break;
-            case 1: /* GetServiceHandle: only services with HLE implementations are exposed. */
+            case 1: { /* GetServiceHandle */
                 result = NX_RESULT_NOT_FOUND;
                 if (rawSize >= 24) {
                     const uint64_t encodedName = readU64LE(raw + 16);
@@ -285,9 +301,14 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
                     for (size_t i = 0; i < 8; ++i) {
                         serviceName[i] = (char)((encodedName >> (i * 8)) & 0xFF);
                     }
-                    (void)serviceName;
+                    NXServiceKind service = serviceFromName(serviceName);
+                    if (service != NX_SERVICE_NONE) {
+                        movedHandle = createSession(&engine->machine, service);
+                        result = movedHandle ? NX_RESULT_SUCCESS : NX_RESULT_OUT_OF_MEMORY;
+                    }
                 }
                 break;
+            }
             default:
                 result = NX_RESULT_NOT_FOUND;
                 break;
