@@ -88,6 +88,9 @@ static void testRomFSMountAndRead(void) {
     NXVFSFile file;
     CHECK(NXVFSOpenFile(&vfs,"romfs","/romfs/boot.bin",&file));
     CHECK(file.size==3);
+    CHECK(NXVFSIsDirectory(&vfs,"romfs","/"));
+    CHECK(NXVFSIsDirectory(&vfs,"romfs","/romfs"));
+    CHECK(!NXVFSIsDirectory(&vfs,"romfs","/romfs/boot.bin"));
     NXVFSDirectoryItem directoryItem;
     CHECK(NXVFSReadDirectory(&vfs,"romfs","/",0,&directoryItem));
     CHECK(directoryItem.isDirectory);
@@ -114,6 +117,7 @@ static void testPFS0MountAndRead(void) {
     CHECK(vfs.mountCount==1);
     CHECK(!NXVFSMountPFS0(&vfs,"exefs",image,imageSize));
     CHECK(!NXVFSMountPFS0(&vfs,"bad/name",image,imageSize));
+    CHECK(NXVFSIsDirectory(&vfs,"exefs","/"));
 
     NXVFSFile file;
     CHECK(NXVFSOpenFile(&vfs,"exefs","main.npdm",&file));
