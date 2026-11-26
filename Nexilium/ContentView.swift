@@ -142,13 +142,13 @@ private struct FirmwareInstallerView: View {
         Form {
             Section("Nintendo Switch firmware") {
                 LabeledContent(
-                    "Installed content",
+                    "Prepared firmware",
                     value: firmwareImported
                         ? "\(firmwareNcaCount) NCA files · \(ByteCountFormatter.string(fromByteCount: Int64(firmwareBytes), countStyle: .file))"
                         : "Not installed"
                 )
                 if isInstallingFirmware {
-                    ProgressView("Installing firmware…")
+                    ProgressView("Preparing firmware…")
                 } else {
                     importButtons(for: .firmware)
                 }
@@ -169,7 +169,7 @@ private struct FirmwareInstallerView: View {
             }
 
             Section {
-                Text("Firmware ZIPs are installed into Nexilium’s app storage as NCA content. prod.keys is checked for a valid header key and master-key entries before it is accepted. title.keys is checked separately.")
+                Text("Nexilium extracts NCA files and validates their encrypted headers. Firmware filesystem sections are not mounted until the section-decryption and filesystem layers are connected. prod.keys is checked before use; title.keys is optional for firmware headers.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -291,6 +291,7 @@ private struct FirmwareInstallerView: View {
             case .firmware:
                 let archiveURL = storageDirectory.appendingPathComponent("firmware-package.zip")
                 let rootDirectory = storageDirectory
+                let keysURL = storageDirectory.appendingPathComponent("prod.keys")
                 let selectedFilename = isCopiedIntoApp ? sourceURL.lastPathComponent : "firmware-package.zip"
                 firmwareImported = false
                 isInstallingFirmware = true
