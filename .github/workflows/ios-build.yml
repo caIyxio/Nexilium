@@ -1,0 +1,49 @@
+name: iOS IPA Build
+
+on:
+  push:
+    branches:
+      - main
+      - "ui/**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for generic iOS device
+        run: |
+          xcodebuild \
+            -project Nexilium.xcodeproj \
+            -scheme Nexilium \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p package/Payload
+          cp -R build/Build/Products/Debug-iphoneos/Nexilium.app package/Payload/
+          cd package
+          zip -r ../Nexilium-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nexilium-unsigned-IPA
+          path: Nexilium-unsigned.ipa
+          if-no-files-found: error
