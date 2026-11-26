@@ -176,9 +176,11 @@ private struct FirmwareInstallerView: View {
                 contentTypes: mode == .file ? [.item] : [.folder],
                 asCopy: mode == .file,
                 onPick: { url in
+                    pickerMode = nil
                     handleImport(url, isCopiedIntoApp: mode == .file)
                 },
                 onFailure: { message in
+                    pickerMode = nil
                     errorMessage = message
                 }
             )
