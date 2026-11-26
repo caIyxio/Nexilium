@@ -6,8 +6,8 @@
 #include <string.h>
 
 #define ROMFS_SIZE 0xBBu
-#define IVFC_DATA_OFFSET 0x1D8u
-#define IVFC_IMAGE_SIZE (IVFC_DATA_OFFSET + ROMFS_SIZE)
+#define IVFC_DATA_OFFSET 0xA0u
+#define IVFC_SECTION_SIZE 0x400u
 
 static int failures = 0;
 
@@ -72,71 +72,95 @@ static void buildRomFS(uint8_t *image) {
     memcpy(image + 0xB8, "abc", 3);
 }
 
-static void buildIVFC(uint8_t *image) {
-    memset(image, 0, IVFC_IMAGE_SIZE);
-    put32(image + 0x00, UINT32_C(0x43465649)); /* IVFC */
-    put32(image + 0x04, UINT32_C(0x00020000));
-    put32(image + 0x08, 0x20);
-    put32(image + 0x0C, NX_IVFC_MAX_LEVELS);
+static void buildIVFCHeader(uint8_t *header) {
+    memset(header, 0, NX_IVFC_HEADER_SIZE);
+    put32(header + 0x00, UINT32_C(0x43465649)); /* IVFC */
+    put32(header + 0x04, UINT32_C(0x00020000));
+    put32(header + 0x08, 0x20);
+    put32(header + 0x0C, NX_IVFC_MAX_LEVELS);
 
     for (uint32_t i = 0; i < NX_IVFC_MAX_LEVELS; ++i) {
-        uint8_t *level = image + 0x10u + (size_t)i * 0x18u;
-        put64(level, i == 5 ? IVFC_DATA_OFFSET
-                            : 0x138u + (uint64_t)i * 0x20u);
+        uint8_t *level = header + 0x10u + (size_t)i * 0x18u;
+        put64(level, i == 5 ? IVFC_DATA_OFFSET : (uint64_t)i * 0x20u);
         put64(level + 8, i == 5 ? ROMFS_SIZE : 0x20u);
         put32(level + 16, 12); /* 4 KiB hash blocks */
     }
-
-    buildRomFS(image + IVFC_DATA_OFFSET);
 }
 
 static void testIVFCRomFSIntegration(void) {
-    uint8_t image[IVFC_IMAGE_SIZE];
-    buildIVFC(image);
+    uint8_t header[NX_IVFC_HEADER_SIZE];
+    uint8_t section[IVFC_SECTION_SIZE] = {0};
+    buildIVFCHeader(header);
+    buildRomFS(section + IVFC_DATA_OFFSET);
 
     NXIVFCView ivfc;
-    const uint8_t *dataLevel = NULL;
-    size_t dataLevelSize = 0;
-    CHECK(NXEngineOpenIVFC(image, sizeof(image), &ivfc));
+    size_t dataOffset = 0;
+    size_t dataSize = 0;
+    CHECK(NXEngineOpenIVFC(header, sizeof(header), sizeof(section), &ivfc));
     CHECK(ivfc.levelCount == NX_IVFC_MAX_LEVELS);
-    CHECK(NXEngineIVFCGetDataLevel(&ivfc, &dataLevel, &dataLevelSize));
-    CHECK(dataLevel == image + IVFC_DATA_OFFSET);
-    CHECK(dataLevelSize == ROMFS_SIZE);
+    CHECK(NXEngineIVFCGetDataLevel(&ivfc, &dataOffset, &dataSize));
+    CHECK(dataOffset == IVFC_DATA_OFFSET);
+    CHECK(dataSize == ROMFS_SIZE);
 
     NXRomFSView romfs;
     NXRomFSFile file;
-    CHECK(NXEngineOpenRomFS(dataLevel, dataLevelSize, &romfs));
+    CHECK(NXEngineOpenRomFS(section + dataOffset, dataSize, &romfs));
     CHECK(NXEngineRomFSGetFile(&romfs, "/romfs/boot.bin", &file));
     CHECK(file.size == 3);
     CHECK(memcmp(file.bytes, "abc", 3) == 0);
 }
 
+static void testIVFCAllowsVariableLevelCount(void) {
+    uint8_t header[NX_IVFC_HEADER_SIZE];
+    buildIVFCHeader(header);
+    put32(header + 0x0C, 5);
+
+    NXIVFCView view;
+    size_t offset = 0;
+    size_t size = 0;
+    CHECK(NXEngineOpenIVFC(header, sizeof(header), IVFC_SECTION_SIZE, &view));
+    CHECK(view.levelCount == 5);
+    CHECK(NXEngineIVFCGetDataLevel(&view, &offset, &size));
+    CHECK(offset == 0x80u);
+    CHECK(size == 0x20u);
+}
+
 static void testIVFCRejectsMalformedInput(void) {
-    uint8_t image[IVFC_IMAGE_SIZE];
+    uint8_t header[NX_IVFC_HEADER_SIZE];
     NXIVFCView view;
 
-    buildIVFC(image);
-    put32(image + 4, UINT32_C(0x00010000));
-    CHECK(!NXEngineOpenIVFC(image, sizeof(image), &view));
+    buildIVFCHeader(header);
+    put32(header + 4, UINT32_C(0x00010000));
+    CHECK(!NXEngineOpenIVFC(header, sizeof(header), IVFC_SECTION_SIZE, &view));
 
-    buildIVFC(image);
-    put32(image + 12, 5);
-    CHECK(!NXEngineOpenIVFC(image, sizeof(image), &view));
+    buildIVFCHeader(header);
+    put32(header + 12, 1);
+    CHECK(!NXEngineOpenIVFC(header, sizeof(header), IVFC_SECTION_SIZE, &view));
 
-    buildIVFC(image);
-    put64(image + 0x10 + 5u * 0x18u, UINT64_MAX);
-    CHECK(!NXEngineOpenIVFC(image, sizeof(image), &view));
+    buildIVFCHeader(header);
+    put32(header + 12, 7);
+    CHECK(!NXEngineOpenIVFC(header, sizeof(header), IVFC_SECTION_SIZE, &view));
 
-    buildIVFC(image);
-    put64(image + 0x10 + 4u * 0x18u + 8u, 0x10);
-    CHECK(!NXEngineOpenIVFC(image, sizeof(image), &view));
+    buildIVFCHeader(header);
+    put64(header + 0x10 + 5u * 0x18u, UINT64_MAX);
+    CHECK(!NXEngineOpenIVFC(header, sizeof(header), IVFC_SECTION_SIZE, &view));
 
-    buildIVFC(image);
-    CHECK(!NXEngineOpenIVFC(image, 0x137, &view));
+    buildIVFCHeader(header);
+    put64(header + 0x10 + 4u * 0x18u + 8u, 0x10);
+    CHECK(!NXEngineOpenIVFC(header, sizeof(header), IVFC_SECTION_SIZE, &view));
+
+    buildIVFCHeader(header);
+    CHECK(!NXEngineOpenIVFC(header, NX_IVFC_HEADER_SIZE - 1,
+                            IVFC_SECTION_SIZE, &view));
+
+    buildIVFCHeader(header);
+    CHECK(!NXEngineOpenIVFC(header, sizeof(header), IVFC_DATA_OFFSET,
+                            &view));
 }
 
 int main(void) {
     testIVFCRomFSIntegration();
+    testIVFCAllowsVariableLevelCount();
     testIVFCRejectsMalformedInput();
 
     if (failures != 0) {
@@ -144,6 +168,6 @@ int main(void) {
         return 1;
     }
 
-    puts("IVFC-to-RomFS integration and malformed-section tests passed");
+    puts("NCA IVFC superblock -> section data -> RomFS tests passed");
     return 0;
 }
