@@ -200,3 +200,20 @@ bool NXVFSReadDirectory(const NXVFS *vfs, const char *mountName,
 
     return false;
 }
+
+bool NXVFSIsDirectory(const NXVFS *vfs, const char *mountName,
+                      const char *path) {
+    if (!vfs || !mountName || !path) return false;
+    for (size_t i = 0; i < NX_VFS_MAX_MOUNTS; ++i) {
+        const NXVFSMount *mount = &vfs->mounts[i];
+        if (!mount->active || strcmp(mount->name, mountName) != 0)
+            continue;
+        if (mount->type == NX_VFS_FILESYSTEM_ROMFS)
+            return NXEngineRomFSIsDirectory(&mount->view.romfs, path);
+        if (mount->type == NX_VFS_FILESYSTEM_PFS0)
+            return path[0] == '\0' ||
+                   (path[0] == '/' && path[1] == '\0');
+        return false;
+    }
+    return false;
+}
