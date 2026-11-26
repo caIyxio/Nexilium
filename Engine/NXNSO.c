@@ -112,10 +112,9 @@ static bool addressInImage(const NXLoadedNSO *image,
 static bool readGuestU64(NXEngine *engine, uint64_t address,
                          uint64_t *value) {
     if (!engine || !value) return false;
-    const uint8_t *bytes = (const uint8_t *)mem_host_ptr(
-        &engine->cpu, address, sizeof(uint64_t), ACC_READ
-    );
-    if (!bytes) return false;
+    uint8_t bytes[sizeof(uint64_t)];
+    if (!NXEngineReadBytes(engine, address, bytes, sizeof(bytes)))
+        return false;
     *value = readU64LE(bytes);
     return true;
 }
@@ -123,13 +122,10 @@ static bool readGuestU64(NXEngine *engine, uint64_t address,
 static bool writeGuestU64(NXEngine *engine, uint64_t address,
                           uint64_t value) {
     if (!engine) return false;
-    uint8_t *bytes = (uint8_t *)mem_host_ptr(
-        &engine->cpu, address, sizeof(uint64_t), ACC_WRITE
-    );
-    if (!bytes) return false;
-    for (size_t i = 0; i < 8; ++i)
+    uint8_t bytes[sizeof(uint64_t)];
+    for (size_t i = 0; i < sizeof(bytes); ++i)
         bytes[i] = (uint8_t)(value >> (i * 8));
-    return true;
+    return NXEngineWriteBytes(engine, address, bytes, sizeof(bytes));
 }
 
 static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
@@ -144,10 +140,9 @@ static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
     const uint64_t count = tableSize / 24u;
     for (uint64_t i = 0; i < count; ++i) {
         const uint64_t entryAddress = tableAddress + i * 24u;
-        const uint8_t *entry = (const uint8_t *)mem_host_ptr(
-            &engine->cpu, entryAddress, 24, ACC_READ
-        );
-        if (!entry) return false;
+        uint8_t entry[24];
+        if (!NXEngineReadBytes(engine, entryAddress, entry, sizeof(entry)))
+            return false;
 
         const uint64_t targetOffset = readU64LE(entry);
         const uint64_t info = readU64LE(entry + 8);
@@ -185,10 +180,9 @@ static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
     const uint64_t count = tableSize / 16u;
     for (uint64_t i = 0; i < count; ++i) {
         const uint64_t entryAddress = tableAddress + i * 16u;
-        const uint8_t *entry = (const uint8_t *)mem_host_ptr(
-            &engine->cpu, entryAddress, 16, ACC_READ
-        );
-        if (!entry) return false;
+        uint8_t entry[16];
+        if (!NXEngineReadBytes(engine, entryAddress, entry, sizeof(entry)))
+            return false;
 
         const uint64_t targetOffset = readU64LE(entry);
         const uint64_t info = readU64LE(entry + 8);
@@ -228,10 +222,10 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
 
     uint64_t pointerAddress = 0;
     if (addOverflowU64(textAddress, 4u, &pointerAddress)) return false;
-    const uint8_t *pointerBytes = (const uint8_t *)mem_host_ptr(
-        &engine->cpu, pointerAddress, 4, ACC_READ
-    );
-    if (!pointerBytes) return false;
+    uint8_t pointerBytes[4];
+    if (!NXEngineReadBytes(engine, pointerAddress,
+                           pointerBytes, sizeof(pointerBytes)))
+        return false;
 
     const uint32_t mod0Offset = readU32LE(pointerBytes);
     if (mod0Offset == 0 || mod0Offset > textSize ||
@@ -241,10 +235,9 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
     uint64_t mod0Address = 0;
     if (addOverflowU64(textAddress, mod0Offset, &mod0Address))
         return false;
-    const uint8_t *mod0 = (const uint8_t *)mem_host_ptr(
-        &engine->cpu, mod0Address, 0x1Cu, ACC_READ
-    );
-    if (!mod0 || readU32LE(mod0) != UINT32_C(0x30444F4D))
+    uint8_t mod0[0x1C];
+    if (!NXEngineReadBytes(engine, mod0Address, mod0, sizeof(mod0)) ||
+        readU32LE(mod0) != UINT32_C(0x30444F4D))
         return true;
 
     image->hasModuleHeader = true;
@@ -266,10 +259,9 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
         if (addOverflowU64(dynamicAddress, i * 16u, &entryAddress) ||
             !addressInImage(image, entryAddress, 16))
             return false;
-        const uint8_t *entry = (const uint8_t *)mem_host_ptr(
-            &engine->cpu, entryAddress, 16, ACC_READ
-        );
-        if (!entry) return false;
+        uint8_t entry[16];
+        if (!NXEngineReadBytes(engine, entryAddress, entry, sizeof(entry)))
+            return false;
 
         const int64_t tag = (int64_t)readU64LE(entry);
         const uint64_t value = readU64LE(entry + 8);
