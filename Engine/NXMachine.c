@@ -257,6 +257,34 @@ NXCPUResult NXEngineRun(NXEngine *engine, uint64_t instructionBudget) {
     return NX_CPU_STEP_LIMIT;
 }
 
+bool NXEngineReadBytes(NXEngine *engine, uint64_t guestAddress,
+                       void *destination, size_t length) {
+    if (!engine || !engine->initialized || (!destination && length) ||
+        length > UINT_MAX)
+        return false;
+    if (length == 0) return true;
+    const void *source = mem_host_ptr(
+        &engine->cpu, guestAddress, (unsigned)length, ACC_READ
+    );
+    if (!source) return false;
+    memcpy(destination, source, length);
+    return true;
+}
+
+bool NXEngineWriteBytes(NXEngine *engine, uint64_t guestAddress,
+                        const void *source, size_t length) {
+    if (!engine || !engine->initialized || (!source && length) ||
+        length > UINT_MAX)
+        return false;
+    if (length == 0) return true;
+    void *destination = mem_host_ptr(
+        &engine->cpu, guestAddress, (unsigned)length, ACC_WRITE
+    );
+    if (!destination) return false;
+    memcpy(destination, source, length);
+    return true;
+}
+
 bool NXEngineMountRomFS(NXEngine *engine, const char *mountName,
                         const uint8_t *image, size_t imageSize) {
     if (!engine || !engine->initialized) return false;
