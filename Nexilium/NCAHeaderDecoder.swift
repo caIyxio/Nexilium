@@ -11,16 +11,21 @@ struct NCASectionInfo: Codable {
     let hashType: UInt8
     let encryptionType: UInt8
     let metadataHashType: UInt8
+    let ctrUpperIV: [UInt8]
+    let ivfcDataOffset: UInt64?
+    let ivfcDataSize: UInt64?
 }
 
 struct NCAHeaderInfo: Codable {
     let magic: String
     let contentType: UInt8
     let keyGeneration: UInt8
+    let keyGeneration2: UInt8
     let keyAreaEncryptionKeyIndex: UInt8
     let contentSize: UInt64
     let programID: UInt64
     let rightsID: String
+    let encryptedKeyArea: Data
     let sections: [NCASectionInfo]
 }
 
@@ -31,6 +36,7 @@ enum NCAHeaderError: LocalizedError {
     case unsupportedMagic(String)
     case invalidContentSize
     case invalidSectionTable
+    case invalidIVFC
 
     var errorDescription: String? {
         switch self {
@@ -46,12 +52,13 @@ enum NCAHeaderError: LocalizedError {
             return "The NCA header reports an invalid content size."
         case .invalidSectionTable:
             return "The NCA header contains an invalid or unsupported section table."
+        case .invalidIVFC:
+            return "An NCA RomFS section has invalid IVFC metadata or level bounds."
         }
     }
 }
 
-/// Decodes the first 0xC00 bytes of a user-supplied NCA file.
-/// This validates the cryptographic container header; it does not decrypt NCA sections.
+/// Decodes the encrypted NCA header, not its filesystem sections.
 enum NCAHeaderDecoder {
     private static let sectorSize = 0x200
     private static let encryptedHeaderSize = 0xC00
@@ -73,7 +80,7 @@ enum NCAHeaderDecoder {
         let key2 = Array(headerKey.suffix(16))
         var decrypted = [UInt8](encrypted)
 
-        // The main header occupies sectors 0 and 1 for both supported formats.
+        // The main header is two 0x200-byte AES-XTS sectors.
         for sector in 0..<2 {
             try decryptSector(
                 &decrypted,
@@ -91,8 +98,8 @@ enum NCAHeaderDecoder {
             throw NCAHeaderError.unsupportedMagic(display)
         }
 
-        // In NCA2 each section header starts its XTS tweak at sector zero.
-        // NCA3 uses each section header's actual sector number.
+        // NCA2 section-header sectors each use tweak sector zero; NCA3 uses
+        // their position in the complete 0xC00-byte header.
         for sector in 2..<6 {
             let sectorNumber: UInt64 = magic == "NCA2" ? 0 : UInt64(sector)
             try decryptSector(
@@ -127,6 +134,37 @@ enum NCAHeaderDecoder {
                 throw NCAHeaderError.invalidSectionTable
             }
             guard nativeSection.present else { continue }
+
+            let fsHeaderOffset = 0x400 + index * 0x200
+            let ctrUpperIV = Array(
+                decrypted[(fsHeaderOffset + 0x140)..<(fsHeaderOffset + 0x148)]
+            )
+
+            var ivfcDataOffset: UInt64?
+            var ivfcDataSize: UInt64?
+            if nativeSection.fsType == 0 && nativeSection.hashType == 3 {
+                var ivfcView = NXIVFCView()
+                var dataOffset = 0
+                var dataSize = 0
+                let ivfcValid = decrypted.withUnsafeBufferPointer { bytes in
+                    guard let baseAddress = bytes.baseAddress else { return false }
+                    let superblock = baseAddress.advanced(by: fsHeaderOffset + 0x8)
+                    return NXEngineOpenIVFC(
+                        superblock,
+                        NX_IVFC_HEADER_SIZE,
+                        nativeSection.byteSize,
+                        &ivfcView
+                    ) && NXEngineIVFCGetDataLevel(
+                        &ivfcView,
+                        &dataOffset,
+                        &dataSize
+                    )
+                }
+                guard ivfcValid else { throw NCAHeaderError.invalidIVFC }
+                ivfcDataOffset = UInt64(dataOffset)
+                ivfcDataSize = UInt64(dataSize)
+            }
+
             sections.append(NCASectionInfo(
                 index: Int(nativeSection.index),
                 startBlock: nativeSection.startBlock,
@@ -136,15 +174,19 @@ enum NCAHeaderDecoder {
                 fileSystemType: nativeSection.fsType,
                 hashType: nativeSection.hashType,
                 encryptionType: nativeSection.encryptionType,
-                metadataHashType: nativeSection.metadataHashType
+                metadataHashType: nativeSection.metadataHashType,
+                ctrUpperIV: ctrUpperIV,
+                ivfcDataOffset: ivfcDataOffset,
+                ivfcDataSize: ivfcDataSize
             ))
         }
 
         let contentType = decrypted[0x205]
-        let keyGeneration = decrypted[0x220]
+        let keyGeneration = decrypted[0x206]
         let keyAreaIndex = decrypted[0x207]
         let contentSize = readUInt64LE(decrypted, at: 0x208)
         let programID = readUInt64LE(decrypted, at: 0x210)
+        let keyGeneration2 = decrypted[0x220]
         let rightsID = decrypted[0x230..<0x240]
             .map { String(format: "%02x", $0) }
             .joined()
@@ -157,10 +199,12 @@ enum NCAHeaderDecoder {
             magic: magic,
             contentType: contentType,
             keyGeneration: keyGeneration,
+            keyGeneration2: keyGeneration2,
             keyAreaEncryptionKeyIndex: keyAreaIndex,
             contentSize: contentSize,
             programID: programID,
             rightsID: rightsID,
+            encryptedKeyArea: Data(decrypted[0x300..<0x340]),
             sections: sections
         )
     }
@@ -182,11 +226,14 @@ enum NCAHeaderDecoder {
     ) throws {
         var sectorTweak = [UInt8](repeating: 0, count: 16)
 
-        // Nintendo's NCA header tweak serializes the sector number big-endian.
         for index in 0..<8 {
             sectorTweak[15 - index] = UInt8((sectorNumber >> (index * 8)) & 0xFF)
         }
-        var tweak = try aesBlock(sectorTweak, key: tweakKey, operation: CCOperation(kCCEncrypt))
+        var tweak = try aesBlock(
+            sectorTweak,
+            key: tweakKey,
+            operation: CCOperation(kCCEncrypt)
+        )
 
         for block in 0..<(sectorSize / 16) {
             let blockOffset = offset + block * 16
@@ -195,9 +242,13 @@ enum NCAHeaderDecoder {
                 mixed[index] = bytes[blockOffset + index] ^ tweak[index]
             }
 
-            let decrypted = try aesBlock(mixed, key: dataKey, operation: CCOperation(kCCDecrypt))
+            let blockResult = try aesBlock(
+                mixed,
+                key: dataKey,
+                operation: CCOperation(kCCDecrypt)
+            )
             for index in 0..<16 {
-                bytes[blockOffset + index] = decrypted[index] ^ tweak[index]
+                bytes[blockOffset + index] = blockResult[index] ^ tweak[index]
             }
             multiplyTweakByX(&tweak)
         }
@@ -250,7 +301,6 @@ enum NCAHeaderDecoder {
             carry = nextCarry
         }
         if carry != 0 {
-            // XTS reduction polynomial: x^128 + x^7 + x^2 + x + 1.
             tweak[0] ^= 0x87
         }
     }
