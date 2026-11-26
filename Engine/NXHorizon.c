@@ -155,9 +155,9 @@ static bool readGuestCString(CPU *cpu, uint64_t address,
         uint64_t byte = 0;
         if (!mem_read(cpu, address + i, 1, &byte)) return false;
         destination[i] = (char)byte;
-        if (destination[i] == '\\0') return true;
+        if (destination[i] == '\0') return true;
     }
-    destination[capacity - 1] = '\\0';
+    destination[capacity - 1] = '\0';
     return false;
 }
 
