@@ -168,22 +168,27 @@ static void buildSymbolRelocatableNSO(uint8_t *nso, size_t size) {
     put64(text+0xC0,4);  put64(text+0xC8,0x220); /* DT_HASH */
     put64(text+0xD0,6);  put64(text+0xD8,0x240); /* DT_SYMTAB */
     put64(text+0xE0,11); put64(text+0xE8,24);    /* DT_SYMENT */
-    put64(text+0xF0,7);  put64(text+0xF8,0x140); /* DT_RELA */
-    put64(text+0x100,8); put64(text+0x108,24);   /* DT_RELASZ */
-    put64(text+0x110,9); put64(text+0x118,24);   /* DT_RELAENT */
-    put64(text+0x120,0); put64(text+0x128,0);    /* DT_NULL */
+    put64(text+0xF0,5);  put64(text+0xF8,0x270); /* DT_STRTAB */
+    put64(text+0x100,10); put64(text+0x108,5);   /* DT_STRSZ */
+    put64(text+0x110,7); put64(text+0x118,0x160); /* DT_RELA */
+    put64(text+0x120,8); put64(text+0x128,24);   /* DT_RELASZ */
+    put64(text+0x130,9); put64(text+0x138,24);   /* DT_RELAENT */
+    put64(text+0x140,0); put64(text+0x148,0);    /* DT_NULL */
 
-    put64(text+0x140,0x1C0); /* r_offset */
-    put64(text+0x148,(UINT64_C(1)<<32)|257u); /* symbol 1, R_AARCH64_ABS64 */
-    put64(text+0x150,0x10); /* r_addend */
+    put64(text+0x160,0x1C0); /* r_offset */
+    put64(text+0x168,(UINT64_C(1)<<32)|257u); /* symbol 1, R_AARCH64_ABS64 */
+    put64(text+0x170,0x10); /* r_addend */
 
     uint8_t *rodata=nso+0x300;
     put32(rodata+0x20,1); /* SysV hash bucket count. */
     put32(rodata+0x24,2); /* SysV hash chain count = two symbols. */
     uint8_t *symbol=rodata+0x40+24; /* Symbol index 1. */
+    put32(symbol,1); /* st_name -> "foo". */
+    symbol[4]=0x10; /* STB_GLOBAL. */
     symbol[6]=1; /* st_shndx: defined in this module. */
     symbol[7]=0;
     put64(symbol+8,0x180); /* st_value relative to module base. */
+    memcpy(rodata+0x70,"\\0foo\\0",5); /* Dynamic string table. */
 }
 
 static void testMOD0LocalSymbolRelocation(void) {
@@ -205,6 +210,45 @@ static void testMOD0LocalSymbolRelocation(void) {
         &engine,loadBase+0x1C0,&relocated,sizeof(relocated)
     ));
     CHECK(relocated==loadBase+0x190);
+    NXEngineDestroy(&engine);
+}
+
+static void testCrossModuleSymbolResolution(void) {
+    uint8_t providerNSO[0x400], consumerNSO[0x400];
+    buildSymbolRelocatableNSO(providerNSO,sizeof(providerNSO));
+    buildSymbolRelocatableNSO(consumerNSO,sizeof(consumerNSO));
+
+    /* The consumer's symbol is undefined; it must resolve from the provider. */
+    uint8_t *consumerSymbol = consumerNSO + 0x300 + 0x40 + 24;
+    consumerSymbol[6] = 0;
+    put64(consumerSymbol + 8,0);
+
+    NXEngine engine;
+    CHECK(NXEngineInit(&engine));
+    NXNSORegistry registry;
+    NXNSORegistryInit(&registry);
+
+    NXLoadedNSO provider, consumer;
+    const uint64_t providerBase=UINT64_C(0x7600000000);
+    const uint64_t consumerBase=UINT64_C(0x7610000000);
+    CHECK(NXEngineLoadNSOWithRegistry(
+        &engine,providerNSO,sizeof(providerNSO),providerBase,
+        &registry,&provider
+    ));
+    CHECK(registry.count==1);
+    CHECK(NXEngineLoadNSOWithRegistry(
+        &engine,consumerNSO,sizeof(consumerNSO),consumerBase,
+        &registry,&consumer
+    ));
+    CHECK(registry.count==2);
+    CHECK(consumer.symbolRelocationCount==1);
+    CHECK(consumer.unsupportedRelocationCount==0);
+
+    uint64_t relocated=0;
+    CHECK(NXEngineReadBytes(
+        &engine,consumerBase+0x1C0,&relocated,sizeof(relocated)
+    ));
+    CHECK(relocated==providerBase+0x190);
     NXEngineDestroy(&engine);
 }
 
@@ -301,6 +345,7 @@ static void testRejectUnsupportedProcess(void) {
 int main(void) {
     testMOD0RelativeRelocation();
     testMOD0LocalSymbolRelocation();
+    testCrossModuleSymbolResolution();
     testMOD0RELRRelativeRelocation();
     testUnsupportedMOD0RelocationIsReported();
     testPrepareMainThread();
