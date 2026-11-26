@@ -38,13 +38,17 @@ typedef enum {
     NX_SERVICE_TIME,
     NX_SERVICE_NVDRV,
     NX_SERVICE_CONTENT_MANAGER,
-    NX_SERVICE_LOADER
+    NX_SERVICE_LOADER,
+    NX_SERVICE_FILESYSTEM,
+    NX_SERVICE_FILE
 } NXServiceKind;
 
 typedef struct {
     uint32_t handle;
     NXServiceKind service;
     bool active;
+    char mountName[NX_VFS_MOUNT_NAME_MAX + 1u];
+    NXVFSFile file;
 } NXSessionHandle;
 
 #define NX_MAX_SESSION_HANDLES 128
