@@ -18,6 +18,8 @@ jobs:
             -I Engine -I Engine/Arm64 \
             Engine/NXMachine.c \
             Engine/NXHorizon.c \
+            Engine/NXVFS.c \
+            Engine/NXRomFS.c \
             Engine/NXNSO.c \
             Engine/NXPFS0.c \
             Engine/NXCPU.c \
@@ -36,6 +38,8 @@ jobs:
             -I Engine -I Engine/Arm64 \
             Engine/NXMachine.c \
             Engine/NXHorizon.c \
+            Engine/NXVFS.c \
+            Engine/NXRomFS.c \
             Engine/NXNSO.c \
             Engine/NXPFS0.c \
             Engine/NXCPU.c \
@@ -126,10 +130,14 @@ jobs:
             -I Engine -I Engine/Arm64 \
             Engine/NXMachine.c \
             Engine/NXHorizon.c \
+            Engine/NXVFS.c \
+            Engine/NXRomFS.c \
             Engine/NXNSO.c \
             Engine/NXPFS0.c \
             Engine/NXNPDM.c \
             Engine/NXProcess.c \
+            Engine/NXVFS.c \
+            Engine/NXRomFS.c \
             Engine/Arm64/cpu.c \
             Engine/Arm64/decode.c \
             Engine/Arm64/exec_fpsimd.c \
