@@ -143,21 +143,27 @@ final class NexiliumGuestProcess {
                 guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
                     return false
                 }
-                return NXEngineLoadNSOWithRegistry(
+                return NXEngineLoadNSO(
                     &engine,
                     bytes,
                     module.image.count,
                     moduleBase,
-                    &moduleRegistry,
                     &loadedModule
                 )
             }
-            guard moduleLoaded else {
+            guard moduleLoaded,
+                  NXNSORegistryRegister(&moduleRegistry, &loadedModule) else {
                 throw NexiliumGuestProcessError.invalidProgramImage
             }
         }
 
-        try prepare(image, at: loadBase, usingRegistry: true)
+        /* Register every image before resolving imports to support cyclic dependencies. */
+        try prepare(image, at: loadBase, usingRegistry: false)
+        guard let preparedProcess,
+              NXNSORegistryRegister(&moduleRegistry, &preparedProcess.mainImage),
+              NXNSORegistryResolvePending(&engine, &moduleRegistry) else {
+            throw NexiliumGuestProcessError.invalidProgramImage
+        }
     }
 
     @discardableResult
