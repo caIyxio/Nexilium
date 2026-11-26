@@ -320,9 +320,7 @@ enum FirmwarePackageInstaller {
                 continue
             }
 
-            for section in header.sections where
-                section.partitionType == 1 && section.fileSystemType == 2 {
-                do {
+            do {
                     let program = try NCAProgramImageReader.read(
                         from: ncaURL,
                         sections: header.sections,
@@ -361,9 +359,8 @@ enum FirmwarePackageInstaller {
                         ),
                         nil
                     )
-                } catch {
-                    lastIssue = error.localizedDescription
-                }
+            } catch {
+                lastIssue = error.localizedDescription
             }
         }
         return (nil, lastIssue)
