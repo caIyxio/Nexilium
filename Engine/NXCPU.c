@@ -1,5 +1,6 @@
 #include "NXCPU.h"
 #include "NXMachine.h"
+#include "NXNSO.h"
 #include "Arm64/mmu.h"
 #include <stdint.h>
 #include <string.h>
@@ -98,5 +99,28 @@ int NXCPUSelfTest(void) {
                 (unsigned long long)svcEngine.machine.heapSize);
     }
     NXEngineDestroy(&svcEngine);
-    return svcOK ? 1 : 0;
+    if (!svcOK) return 0;
+
+    /* Load a compressed NSO text segment (one MOVZ instruction) and execute it. */
+    NXEngine nsoEngine;
+    if (!NXEngineInit(&nsoEngine)) return 0;
+    uint8_t nso[0x105] = {0};
+    nso[0] = 'N'; nso[1] = 'S'; nso[2] = 'O'; nso[3] = '0';
+    nso[0x0C] = 1; /* .text is LZ4-compressed. */
+    nso[0x10] = 0x00; nso[0x11] = 0x01; /* TextFileOffset = 0x100. */
+    nso[0x18] = 0x04;                   /* TextMemorySize = 4. */
+    nso[0x60] = 0x05;                   /* Compressed text size = 5. */
+    nso[0x100] = 0x40;                  /* LZ4 token: four literal bytes. */
+    const uint8_t movz[] = {0x40, 0x05, 0x80, 0xD2}; /* MOVZ X0,#42 (LE). */
+    memcpy(nso + 0x101, movz, sizeof(movz));
+    NXLoadedNSO loaded;
+    bool nsoLoaded = NXEngineLoadNSO(&nsoEngine, nso, sizeof(nso),
+                                     UINT64_C(0x7100000000), &loaded);
+    NXCPUResult nsoRun = nsoLoaded ? NXEngineRun(&nsoEngine, 1) : NX_CPU_INVALID_ARGUMENT;
+    bool nsoOK = nsoLoaded &&
+                 nsoRun == NX_CPU_STEP_LIMIT &&
+                 loaded.entryPoint == UINT64_C(0x7100000000) &&
+                 nsoEngine.cpu.x[0] == 42;
+    NXEngineDestroy(&nsoEngine);
+    return nsoOK ? 1 : 0;
 }
