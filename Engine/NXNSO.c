@@ -175,22 +175,28 @@ static bool applyAArch64AbsoluteRelocation(
         return false;
 
     if (type == 257u) { /* R_AARCH64_ABS64 */
-        if (!addressInImage(image, targetAddress, 8) ||
-            !resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
-                                  symbolCount, symbolIndex, &symbolAddress) ||
-            !addSignedOffset(symbolAddress, addend, &value) ||
+        if (!addressInImage(image, targetAddress, 8)) return false;
+        if (!resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
+                                  symbolCount, symbolIndex, &symbolAddress)) {
+            ++stats->unsupportedRelocationCount;
+            return true; /* Undefined imports still require rtld. */
+        }
+        if (!addSignedOffset(symbolAddress, addend, &value) ||
             !writeGuestU64(engine, targetAddress, value))
             return false;
-        ++stats->relativeRelocationCount;
+        ++stats->symbolRelocationCount;
         return true;
     }
 
     if (type == 258u) { /* R_AARCH64_ABS32 */
         uint8_t encoded[4];
-        if (!addressInImage(image, targetAddress, 4) ||
-            !resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
-                                  symbolCount, symbolIndex, &symbolAddress) ||
-            !addSignedOffset(symbolAddress, addend, &value) ||
+        if (!addressInImage(image, targetAddress, 4)) return false;
+        if (!resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
+                                  symbolCount, symbolIndex, &symbolAddress)) {
+            ++stats->unsupportedRelocationCount;
+            return true;
+        }
+        if (!addSignedOffset(symbolAddress, addend, &value) ||
             value > UINT32_MAX)
             return false;
         const uint32_t value32 = (uint32_t)value;
@@ -200,7 +206,7 @@ static bool applyAArch64AbsoluteRelocation(
         encoded[3] = (uint8_t)(value32 >> 24);
         if (!NXEngineWriteBytes(engine, targetAddress, encoded, sizeof(encoded)))
             return false;
-        ++stats->relativeRelocationCount;
+        ++stats->symbolRelocationCount;
         return true;
     }
     return false;
