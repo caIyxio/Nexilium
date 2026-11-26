@@ -7,10 +7,9 @@ struct NCASectionInfo: Codable {
     let endBlock: UInt32
     let byteOffset: UInt64
     let byteSize: UInt64
+    let partitionType: UInt8
     let fileSystemType: UInt8
-    let hashType: UInt8
     let encryptionType: UInt8
-    let metadataHashType: UInt8
     let ctrUpperIV: [UInt8]
     let ivfcDataOffset: UInt64?
     let ivfcDataSize: UInt64?
@@ -150,7 +149,7 @@ enum NCAHeaderDecoder {
             var pfs0DataOffset: UInt64?
             var pfs0DataSize: UInt64?
 
-            if nativeSection.fsType == 0 && nativeSection.hashType == 3 {
+            if nativeSection.partitionType == 0 && nativeSection.fileSystemType == 3 {
                 var ivfcView = NXIVFCView()
                 var dataOffset = 0
                 var dataSize = 0
@@ -171,7 +170,7 @@ enum NCAHeaderDecoder {
                 guard ivfcValid else { throw NCAHeaderError.invalidIVFC }
                 ivfcDataOffset = UInt64(dataOffset)
                 ivfcDataSize = UInt64(dataSize)
-            } else if nativeSection.fsType == 1 && nativeSection.hashType == 2 {
+            } else if nativeSection.partitionType == 1 && nativeSection.fileSystemType == 2 {
                 // The PFS0 superblock begins at FS-header + 0x8. Its
                 // pfs0_offset and pfs0_size fields are at superblock +0x38/+0x40.
                 let pfsOffset = readUInt64LE(decrypted, at: fsHeaderOffset + 0x40)
@@ -191,10 +190,9 @@ enum NCAHeaderDecoder {
                 endBlock: nativeSection.endBlock,
                 byteOffset: nativeSection.byteOffset,
                 byteSize: nativeSection.byteSize,
-                fileSystemType: nativeSection.fsType,
-                hashType: nativeSection.hashType,
+                partitionType: nativeSection.partitionType,
+                fileSystemType: nativeSection.fileSystemType,
                 encryptionType: nativeSection.encryptionType,
-                metadataHashType: nativeSection.metadataHashType,
                 ctrUpperIV: ctrUpperIV,
                 ivfcDataOffset: ivfcDataOffset,
                 ivfcDataSize: ivfcDataSize,
