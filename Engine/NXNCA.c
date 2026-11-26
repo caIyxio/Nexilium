@@ -74,16 +74,16 @@ bool NXNCAParseSectionTable(const uint8_t *decryptedHeader,
         section->startBlock = startBlock;
         section->endBlock = endBlock;
         section->fsHeaderVersion = fsHeaderVersion;
-        section->fsType = fsHeader[2];
-        section->hashType = fsHeader[3];
+        section->partitionType = fsHeader[2];
+        section->fileSystemType = fsHeader[3];
         section->encryptionType = fsHeader[4];
-        section->metadataHashType = fsHeader[5];
         section->byteOffset = byteOffset;
         section->byteSize = endOffset - byteOffset;
 
         /* Only known NCA filesystem/hash/encryption identifiers are accepted. */
-        if (section->fsType > 1 || section->hashType > 6 ||
-            section->encryptionType > 6 || section->metadataHashType > 1)
+        if (section->partitionType > 1 ||
+            (section->fileSystemType != 2 && section->fileSystemType != 3) ||
+            section->encryptionType < 1 || section->encryptionType > 4)
             return false;
 
         for (uint32_t previous = 0; previous < i; ++previous) {
