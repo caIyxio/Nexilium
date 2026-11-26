@@ -287,6 +287,12 @@ int NXCPUSelfTest(void) {
         fspOK = result == 0 && responseResult == 0 && fileSize == 5;
     }
 
+    const uint64_t guestRootAddress = svcCodeBase + 0x280;
+    const char guestRoot[] = "/";
+    fspOK = fspOK && NXEngineLoadBytes(
+        &svcEngine, guestRootAddress, guestRoot, sizeof(guestRoot)
+    );
+
     /* GetEntryType must distinguish a directory from a regular file. */
     if (fspOK) {
         memset(hipc, 0, 0x100);
@@ -307,11 +313,6 @@ int NXCPUSelfTest(void) {
     }
 
     /* IFileSystem OpenDirectory (cmd 9) and IDirectory count/read. */
-    const uint64_t guestRootAddress = svcCodeBase + 0x280;
-    const char guestRoot[] = "/";
-    fspOK = fspOK && NXEngineLoadBytes(
-        &svcEngine, guestRootAddress, guestRoot, sizeof(guestRoot)
-    );
     if (fspOK) {
         memset(hipc, 0, 0x100);
         uint32_t header0 = 4u | (1u << 16), header1 = 6;
