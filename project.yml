@@ -1,6 +1,6 @@
 name: Nexilium
 options:
-  bundleIdPrefix: com.calyxio
+  bundleIdPrefix: com.siliconteam
   deploymentTarget:
     iOS: "18.0"
 packages:
@@ -18,7 +18,9 @@ targets:
         product: AppEntitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.calyxio.nexilium
+        PRODUCT_BUNDLE_IDENTIFIER: com.siliconteam.nexilium
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
