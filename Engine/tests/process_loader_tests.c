@@ -188,7 +188,7 @@ static void buildSymbolRelocatableNSO(uint8_t *nso, size_t size) {
     symbol[6]=1; /* st_shndx: defined in this module. */
     symbol[7]=0;
     put64(symbol+8,0x180); /* st_value relative to module base. */
-    memcpy(rodata+0x70,"\\0foo\\0",5); /* Dynamic string table. */
+    memcpy(rodata+0x70,"\0foo\0",5); /* Dynamic string table. */
 }
 
 static void testMOD0LocalSymbolRelocation(void) {
