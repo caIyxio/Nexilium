@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build:
     timeout-minutes: 30
-    # The arm64 macOS hosted pool has been failing to provision runners.
+    # The arm64 macOS hosted pool has been failing to provision.
     # Use the Intel pool as a temporary workaround.
     runs-on: macos-15-intel
     steps:
@@ -35,9 +35,23 @@ jobs:
       - name: Normalize app icon dimensions
         run: sips -z 1024 1024 Nexilium/Assets.xcassets/AppIcon.appiconset/AppIcon.png
 
+      - name: Capture Xcode version
+        id: xcode-version
+        run: echo "version=$(xcodebuild -version | awk 'NR==1 {print $2}')" >> "$GITHUB_OUTPUT"
+
+      # Restore the full DerivedData folder. This preserves Swift module caches,
+      # package checkouts, compiled objects and products across commits.
+      - name: Restore Xcode derived data
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: ${{ runner.os }}-${{ runner.arch }}-xcode-${{ steps.xcode-version.outputs.version }}-${{ hashFiles('project.yml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-xcode-${{ steps.xcode-version.outputs.version }}-${{ hashFiles('project.yml') }}-
+
       - name: Resolve Swift packages
         timeout-minutes: 10
-        run: xcodebuild -resolvePackageDependencies -project Nexilium.xcodeproj -scheme Nexilium
+        run: xcodebuild -resolvePackageDependencies -project Nexilium.xcodeproj -scheme Nexilium -derivedDataPath build
 
       - name: Build for generic iOS device
         timeout-minutes: 20
@@ -47,7 +61,10 @@ jobs:
             -scheme Nexilium \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
+            -jobs 4 \
             CODE_SIGNING_ALLOWED=NO \
+            SWIFT_ENABLE_BATCH_MODE=NO \
+            -showBuildTimingSummary \
             build
 
       - name: Package unsigned IPA
