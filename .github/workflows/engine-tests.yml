@@ -19,6 +19,7 @@ jobs:
             Engine/NXMachine.c \
             Engine/NXHorizon.c \
             Engine/NXNSO.c \
+            Engine/NXPFS0.c \
             Engine/NXCPU.c \
             Engine/Arm64/cpu.c \
             Engine/Arm64/decode.c \
