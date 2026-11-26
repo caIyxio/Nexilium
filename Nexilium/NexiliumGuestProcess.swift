@@ -159,11 +159,12 @@ final class NexiliumGuestProcess {
 
         /* Register every image before resolving imports to support cyclic dependencies. */
         try prepare(image, at: loadBase, usingRegistry: false)
-        guard let preparedProcess,
-              NXNSORegistryRegister(&moduleRegistry, &preparedProcess.mainImage),
+        guard var prepared = self.preparedProcess,
+              NXNSORegistryRegister(&moduleRegistry, &prepared.mainImage),
               NXNSORegistryResolvePending(&engine, &moduleRegistry) else {
             throw NexiliumGuestProcessError.invalidProgramImage
         }
+        self.preparedProcess = prepared
     }
 
     @discardableResult
