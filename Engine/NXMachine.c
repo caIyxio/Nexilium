@@ -231,3 +231,9 @@ void NXEngineClearException(NXEngine *engine) {
     if (engine) memset(&engine->machine.pendingException, 0,
                        sizeof(engine->machine.pendingException));
 }
+
+/* The system-menu gate remains closed until the complete Horizon boot chain,
+   firmware filesystem, services, and GPU presentation path are connected. */
+int NXEngineCanBootSystemMenu(void) {
+    return 0;
+}
