@@ -92,6 +92,10 @@ bool NXEngineMapMemory(NXEngine *engine, uint64_t guestBase, size_t size,
                        unsigned permissions);
 bool NXEngineLoadBytes(NXEngine *engine, uint64_t guestAddress,
                        const void *bytes, size_t length);
+bool NXEngineReadBytes(NXEngine *engine, uint64_t guestAddress,
+                       void *destination, size_t length);
+bool NXEngineWriteBytes(NXEngine *engine, uint64_t guestAddress,
+                        const void *source, size_t length);
 bool NXEngineMountRomFS(NXEngine *engine, const char *mountName,
                         const uint8_t *image, size_t imageSize);
 bool NXEngineMountPFS0(NXEngine *engine, const char *mountName,
