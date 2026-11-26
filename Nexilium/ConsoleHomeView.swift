@@ -48,7 +48,7 @@ struct ConsoleHomeView: View {
                     Spacer(minLength: 16)
 
                     HStack(spacing: 0) {
-                        menuButton("Mii Creator", icon: .smile) { showingMiiCreator = true }
+                        menuButton("Mii Creator", icon: .faceSlightlySmiling) { showingMiiCreator = true }
                         menuButton("Firmware", icon: .folderDown) { onFirmware?() }
                         menuButton("Controllers", icon: .gamepad2) { settingsCategory = .controllers; showingSettings = true }
                         menuButton("Settings", icon: .settings) { settingsCategory = .graphics; showingSettings = true }
