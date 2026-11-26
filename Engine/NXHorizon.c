@@ -415,6 +415,8 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
     const uint32_t methodID = readU32LE(raw + 8);
     uint32_t result = NX_RESULT_NOT_FOUND;
     uint32_t movedHandle = 0;
+    uint8_t extraData[16] = {0};
+    size_t extraDataSize = 0;
 
     if (session->service == NX_SERVICE_MANAGER) {
         switch (methodID) {
@@ -422,7 +424,6 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
                 result = NX_RESULT_SUCCESS;
                 break;
             case 1: { /* GetServiceHandle */
-                result = NX_RESULT_NOT_FOUND;
                 if (rawSize >= 24) {
                     const uint64_t encodedName = readU64LE(raw + 16);
                     char serviceName[9] = {0};
@@ -438,12 +439,97 @@ uint32_t NXHorizonSendSyncRequest(NXEngine *engine, uint32_t handle) {
                 break;
             }
             default:
-                result = NX_RESULT_NOT_FOUND;
                 break;
+        }
+    } else if (session->service == NX_SERVICE_FSP) {
+        if (methodID == 2 && rawSize >= 16) {
+            /* OpenDataFileSystemByCurrentProcess -> this process's read-only RomFS. */
+            movedHandle = createFilesystemSession(&engine->machine, "romfs");
+            result = movedHandle ? NX_RESULT_SUCCESS : NX_RESULT_NOT_FOUND;
+        }
+    } else if (session->service == NX_SERVICE_FILESYSTEM) {
+        if (methodID == 7 && rawSize >= 16) { /* GetEntryType */
+            uint64_t pathAddress = 0, pathSize = 0;
+            char path[0x302];
+            if (hipcGetBufferDescriptor(buffer, 0x9u, 0,
+                                        &pathAddress, &pathSize) &&
+                readGuestPath(&engine->cpu, pathAddress, pathSize,
+                              path, sizeof(path))) {
+                NXVFSFile file;
+                if (NXVFSOpenFile(&engine->machine.vfs,
+                                  session->mountName, path, &file)) {
+                    const uint32_t entryType = 1; /* File. */
+                    memcpy(extraData, &entryType, sizeof(entryType));
+                    extraDataSize = sizeof(entryType);
+                    result = NX_RESULT_SUCCESS;
+                }
+            }
+        } else if (methodID == 8 && rawSize >= 20) { /* OpenFile */
+            uint64_t pathAddress = 0, pathSize = 0;
+            char path[0x302];
+            const uint32_t mode = readU32LE(raw + 16);
+            if ((mode & 1u) != 0 &&
+                (mode & 2u) == 0 &&
+                hipcGetBufferDescriptor(buffer, 0x19u, 0,
+                                        &pathAddress, &pathSize) &&
+                readGuestPath(&engine->cpu, pathAddress, pathSize,
+                              path, sizeof(path))) {
+                NXVFSFile file;
+                if (NXVFSOpenFile(&engine->machine.vfs,
+                                  session->mountName, path, &file)) {
+                    movedHandle = createFileSession(&engine->machine, &file);
+                    result = movedHandle ? NX_RESULT_SUCCESS : NX_RESULT_OUT_OF_MEMORY;
+                }
+            }
+        }
+    } else if (session->service == NX_SERVICE_FILE) {
+        if (methodID == 4 && rawSize >= 16) { /* GetSize */
+            const uint64_t fileSize = session->file.size;
+            memcpy(extraData, &fileSize, sizeof(fileSize));
+            extraDataSize = sizeof(fileSize);
+            result = NX_RESULT_SUCCESS;
+        } else if (methodID == 0 && rawSize >= 32) { /* Read */
+            uint64_t destinationAddress = 0, destinationSize = 0;
+            const uint64_t fileOffset = readU64LE(raw + 16);
+            const uint64_t requestedSize = readU64LE(raw + 24);
+            if (hipcGetBufferDescriptor(buffer, 0x6u, 0,
+                                        &destinationAddress, &destinationSize)) {
+                const uint64_t boundedSize =
+                    requestedSize < destinationSize ? requestedSize : destinationSize;
+                if (boundedSize <= SIZE_MAX) {
+                    void *destination = mem_host_ptr(
+                        &engine->cpu, destinationAddress, (size_t)boundedSize,
+                        ACC_WRITE
+                    );
+                    if (destination || boundedSize == 0) {
+                        size_t bytesRead = 0;
+                        if (NXVFSReadFile(&session->file, fileOffset,
+                                          destination, (size_t)boundedSize,
+                                          &bytesRead)) {
+                            const uint64_t outputSize = bytesRead;
+                            memcpy(extraData, &outputSize, sizeof(outputSize));
+                            extraDataSize = sizeof(outputSize);
+                            result = NX_RESULT_SUCCESS;
+                        } else {
+                            result = NX_RESULT_INVALID_ADDRESS;
+                        }
+                    } else {
+                        result = NX_RESULT_INVALID_ADDRESS;
+                    }
+                } else {
+                    result = NX_RESULT_INVALID_SIZE;
+                }
+            }
+        } else if (methodID == 2 && rawSize >= 16) { /* Flush: read-only files need no action. */
+            result = NX_RESULT_SUCCESS;
         }
     }
 
-    writeCmifResponse(buffer, result, movedHandle);
+    if (extraDataSize != 0)
+        writeCmifResponseData(buffer, result, movedHandle,
+                              extraData, extraDataSize);
+    else
+        writeCmifResponse(buffer, result, movedHandle);
     return result;
 }
 
