@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct SettingsView: View {
     var body: some View {
@@ -10,7 +11,7 @@ struct SettingsView: View {
                     SettingsCategoryRow(
                         title: "Graphics",
                         subtitle: "Rendering, resolution and performance",
-                        symbol: "gpu"
+                        symbol: "tv"
                     )
                 }
 
@@ -91,6 +92,7 @@ private struct GraphicsSettingsView: View {
     @AppStorage("graphics.vsync") private var verticalSync = true
     @AppStorage("graphics.shaderCache") private var shaderCache = true
     @AppStorage("graphics.showPerformanceOverlay") private var showPerformanceOverlay = false
+    @AppStorage("graphics.ramLimit") private var ramLimit = "Auto"
 
     var body: some View {
         Form {
@@ -111,6 +113,28 @@ private struct GraphicsSettingsView: View {
                 }
             }
 
+            Section("Memory") {
+                Picker("Emulator RAM limit", selection: $ramLimit) {
+                    Text("Automatic").tag("Auto")
+                    Text("1 GB").tag("1 GB")
+                    Text("1.5 GB").tag("1.5 GB")
+                    Text("2 GB").tag("2 GB")
+                    Text("3 GB").tag("3 GB")
+                    Text("4 GB").tag("4 GB")
+                }
+
+                MemoryBudgetStatusView()
+
+                LabeledContent("Increased memory limit", value: "Runtime budget check")
+                Text("iOS does not provide a public API to read the increased-memory entitlement directly. Nexilium checks the live memory available to this app instead; that value reflects the active process limit, but cannot prove which entitlement granted it.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text("The emulator RAM cap is a preference for the emulation memory manager. It does not increase the memory iOS allows Nexilium to use.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Performance") {
                 Toggle("Vertical sync", isOn: $verticalSync)
                 Toggle("Shader cache", isOn: $shaderCache)
@@ -119,6 +143,37 @@ private struct GraphicsSettingsView: View {
         }
         .navigationTitle("Graphics")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct MemoryBudgetStatusView: View {
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 2)) { _ in
+            let availableBytes = os_proc_available_memory()
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Available to Nexilium")
+                    Spacer()
+                    Text(ByteCountFormatter.string(
+                        fromByteCount: Int64(availableBytes),
+                        countStyle: .memory
+                    ))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                }
+
+                if availableBytes == 0 {
+                    Label("Memory budget unavailable", systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label("Live iOS memory budget detected", systemImage: "checkmark.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 3)
+        }
     }
 }
 
