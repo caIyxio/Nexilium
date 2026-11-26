@@ -295,8 +295,9 @@ static bool applyAArch64AbsoluteRelocation(
     if (type == 258u) { /* R_AARCH64_ABS32 */
         uint8_t encoded[4];
         if (!addressInImage(image, targetAddress, 4)) return false;
-        if (!resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
-                                  symbolCount, symbolIndex, &symbolAddress)) {
+        if (!resolveDynamicSymbol(engine, loadBase, image, registry,
+                                  symbolTableAddress, symbolCount,
+                                  symbolIndex, &symbolAddress)) {
             ++stats->unsupportedRelocationCount;
             return true;
         }
