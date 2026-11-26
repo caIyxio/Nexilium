@@ -46,7 +46,7 @@ private struct HomeView: View {
     // The mock ConsoleHomeView is deliberately not exposed as a Switch System Menu.
     // Enable this action only when the real HOS boot pipeline is connected.
     private var systemMenuReady: Bool {
-        firmwareImported && prodKeysImported && titleKeysImported &&
+        firmwareImported && prodKeysImported &&
         NexiliumEngine.systemMenuBootSupported
     }
 
@@ -294,13 +294,14 @@ private struct FirmwareInstallerView: View {
                 let selectedFilename = isCopiedIntoApp ? sourceURL.lastPathComponent : "firmware-package.zip"
                 firmwareImported = false
                 isInstallingFirmware = true
-                statusMessage = "Reading firmware archive and extracting NCA content…"
+                statusMessage = "Decrypting NCA headers and preparing firmware content…"
 
                 Task {
                     do {
                         let summary = try await Task.detached(priority: .userInitiated) {
                             try FirmwarePackageInstaller.install(
                                 archiveURL: archiveURL,
+                                prodKeysURL: keysURL,
                                 storageDirectory: rootDirectory
                             )
                         }.value
@@ -308,7 +309,7 @@ private struct FirmwareInstallerView: View {
                         firmwareNcaCount = summary.ncaCount
                         firmwareBytes = Double(summary.totalBytes)
                         firmwareImported = true
-                        statusMessage = "Installed \(summary.ncaCount) NCA files, including \(summary.metadataNcaCount) content metadata archives."
+                        statusMessage = "Validated \(summary.ncaCount) NCA headers, including \(summary.metadataNcaCount) metadata archives. Firmware content is prepared for the runtime."
                         isInstallingFirmware = false
                     } catch {
                         firmwareImported = false
