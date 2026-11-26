@@ -3,12 +3,19 @@ options:
   bundleIdPrefix: com.calyxio
   deploymentTarget:
     iOS: "18.0"
+packages:
+  AppEntitlements:
+    url: https://github.com/wiedem/app-entitlements.git
+    from: 2.0.0
 targets:
   Nexilium:
     type: application
     platform: iOS
     sources:
       - path: Nexilium
+    dependencies:
+      - package: AppEntitlements
+        product: AppEntitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.calyxio.nexilium
