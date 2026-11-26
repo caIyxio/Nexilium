@@ -43,6 +43,19 @@ enum NCAProgramImageReader {
             prodKeysURL: prodKeysURL
         )
 
+        return try decode(npdm: npdm, mainNSO: main)
+    }
+
+    static func loadExtracted(
+        mainNSOURL: URL,
+        npdmURL: URL
+    ) throws -> NCAProgramImage {
+        let main = try Data(contentsOf: mainNSOURL, options: .mappedIfSafe)
+        let npdm = try Data(contentsOf: npdmURL, options: .mappedIfSafe)
+        return try decode(npdm: npdm, mainNSO: main)
+    }
+
+    static func decode(npdm: Data, mainNSO: Data) throws -> NCAProgramImage {
         var native = NXNPDMView()
         let valid = npdm.withUnsafeBytes { rawBuffer -> Bool in
             guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
@@ -66,7 +79,7 @@ enum NCAProgramImageReader {
             is64Bit: (native.mmuFlags & 1) != 0,
             addressSpaceType: (native.mmuFlags >> 1) & 0x7
         )
-        return NCAProgramImage(metadata: metadata, mainNSO: main, npdm: npdm)
+        return NCAProgramImage(metadata: metadata, mainNSO: mainNSO, npdm: npdm)
     }
 }
 
