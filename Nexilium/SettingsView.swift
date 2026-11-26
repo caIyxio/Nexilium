@@ -1,65 +1,53 @@
 import SwiftUI
 import AppEntitlements
 
+private enum SettingsCategory: String, CaseIterable, Identifiable {
+    case graphics = "Graphics"
+    case controllers = "Controllers"
+    case system = "System"
+    case miscellaneous = "Miscellaneous"
+    case about = "About Nexilium"
+    var id: String { rawValue }
+}
+
 struct SettingsView: View {
+    @Environment(\\.dismiss) private var dismiss
+    @State private var selection: SettingsCategory? = .graphics
+
     var body: some View {
-        List {
-            Section {
-                NavigationLink {
-                    GraphicsSettingsView()
-                } label: {
-                    SettingsCategoryRow(
-                        title: "Graphics",
-                        subtitle: "Rendering, resolution and performance",
-                        symbol: "tv"
-                    )
-                }
-
-                NavigationLink {
-                    ControllerSettingsView()
-                } label: {
-                    SettingsCategoryRow(
-                        title: "Controllers",
-                        subtitle: "Input devices and button layout",
-                        symbol: "gamecontroller"
-                    )
-                }
-
-                NavigationLink {
-                    SystemSettingsView()
-                } label: {
-                    SettingsCategoryRow(
-                        title: "System",
-                        subtitle: "Region, language and audio",
-                        symbol: "cpu"
-                    )
-                }
-
-                NavigationLink {
-                    MiscSettingsView()
-                } label: {
-                    SettingsCategoryRow(
-                        title: "Miscellaneous",
-                        subtitle: "Overlays and save preferences",
-                        symbol: "slider.horizontal.3"
-                    )
+        NavigationSplitView {
+            List(SettingsCategory.allCases, selection: $selection) { category in
+                Label(category.rawValue, systemImage: icon(for: category))
+                    .tag(category)
+            }
+            .navigationTitle("System Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
                 }
             }
-
-            Section {
-                NavigationLink {
-                    AboutView()
-                } label: {
-                    SettingsCategoryRow(
-                        title: "About Nexilium",
-                        subtitle: "Version, project and acknowledgements",
-                        symbol: "info.circle"
-                    )
+        } detail: {
+            Group {
+                switch selection ?? .graphics {
+                case .graphics: GraphicsSettingsView()
+                case .controllers: ControllerSettingsView()
+                case .system: SystemSettingsView()
+                case .miscellaneous: MiscSettingsView()
+                case .about: AboutView()
                 }
             }
         }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationSplitViewStyle(.balanced)
+    }
+
+    private func icon(for category: SettingsCategory) -> String {
+        switch category {
+        case .graphics: "monitor"
+        case .controllers: "gamecontroller"
+        case .system: "cpu"
+        case .miscellaneous: "sliders"
+        case .about: "info"
+        }
     }
 }
 
