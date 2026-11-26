@@ -96,14 +96,14 @@ static void buildRelocatableNSO(uint8_t *nso, size_t size,
     put32(text+0x80,UINT32_C(0x30444F4D));
     put32(text+0x84,0x40); /* .dynamic is MOD0 + 0x40. */
 
-    put64(text+0xC0,7);  put64(text+0xC8,0xE0); /* DT_RELA */
+    put64(text+0xC0,7);  put64(text+0xC8,0x120); /* DT_RELA */
     put64(text+0xD0,8);  put64(text+0xD8,24);   /* DT_RELASZ */
     put64(text+0xE0,9);  put64(text+0xE8,24);   /* DT_RELAENT */
     put64(text+0xF0,0);  put64(text+0xF8,0);    /* DT_NULL */
 
-    put64(text+0x100,0x150); /* r_offset */
-    put64(text+0x108,relocationType); /* symbol index 0, relocation type */
-    put64(text+0x110,0x1234); /* r_addend */
+    put64(text+0x120,0x150); /* r_offset */
+    put64(text+0x128,relocationType); /* symbol index 0, relocation type */
+    put64(text+0x130,0x1234); /* r_addend */
 }
 
 static void testMOD0RelativeRelocation(void) {
