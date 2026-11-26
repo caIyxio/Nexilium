@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "Arm64/cpu.h"
+#include "NXCPU.h"
 
 #define NX_MAX_MEMORY_REGIONS 64
 
