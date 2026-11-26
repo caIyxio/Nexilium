@@ -99,7 +99,7 @@ final class NexiliumGuestProcess {
         let romFSURL = assets.romFSPath.map {
             storageDirectory.appendingPathComponent($0)
         }
-        let moduleURLs = assets.modulePaths.map {
+        let moduleURLs = (assets.modulePaths ?? []).map {
             storageDirectory.appendingPathComponent($0)
         }
         let image = try NCAProgramImageReader.loadExtracted(
