@@ -165,7 +165,19 @@ bool NXEngineInit(NXEngine *engine) {
     memset(engine, 0, sizeof(*engine));
     engine->cpu.m = &engine->machine;
     cpu_reset(&engine->cpu, 0, 0);
+    engine->machine.tlsBase = NX_TLS_BASE;
+    engine->machine.nextHandle = 1;
     engine->initialized = true;
+
+    if (!NXEngineMapMemory(engine, NX_TLS_BASE, NX_TLS_SIZE,
+                           NX_MEMORY_READ | NX_MEMORY_WRITE)) {
+        engine->initialized = false;
+        return false;
+    }
+
+    /* TPIDRRO_EL0 is the guest-visible base of the Horizon TLS region. */
+    engine->cpu.tpidrro_el0 = NX_TLS_BASE;
+    for (size_t i = 0; i < 4; ++i) engine->cpu.tpidr[i] = NX_TLS_BASE;
     return true;
 }
 
