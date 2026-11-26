@@ -287,6 +287,25 @@ int NXCPUSelfTest(void) {
         fspOK = result == 0 && responseResult == 0 && fileSize == 5;
     }
 
+    /* GetEntryType must distinguish a directory from a regular file. */
+    if (fspOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4u | (1u << 16), header1 = 4;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        uint32_t pointer0 = (uint32_t)(sizeof(guestRoot) << 16);
+        uint32_t pointer1 = (uint32_t)guestRootAddress;
+        memcpy(hipc + 8, &pointer0, 4);
+        memcpy(hipc + 12, &pointer1, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 7, 0 };
+        memcpy(hipc + 0x10, request, sizeof(request));
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, fileSystemHandle);
+        uint32_t responseResult = UINT32_MAX, entryType = UINT32_MAX;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&entryType, hipc + 0x20, 4);
+        fspOK = result == 0 && responseResult == 0 && entryType == 0;
+    }
+
     /* IFileSystem OpenDirectory (cmd 9) and IDirectory count/read. */
     const uint64_t guestRootAddress = svcCodeBase + 0x280;
     const char guestRoot[] = "/";
