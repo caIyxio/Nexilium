@@ -200,7 +200,7 @@ private struct FirmwareInstallerView: View {
         do {
             guard let sourceURL = try result.get().first else { return }
             if let expectedExtension, sourceURL.pathExtension.lowercased() != expectedExtension {
-                errorMessage = "Please select a file named \\(destinationName)."
+                errorMessage = "Please select a file named \(destinationName)."
                 return
             }
 
@@ -233,40 +233,14 @@ private struct SystemMenuView: View {
     private let orientationController = LandscapeOrientationController()
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            VStack(spacing: 18) {
-                Image(systemName: "gamecontroller.fill")
-                    .font(.system(size: 42))
-                    .foregroundStyle(.white)
-
-                Text("System Menu")
-                    .font(.largeTitle.weight(.semibold))
-                    .foregroundStyle(.white)
-
-                Text("Firmware files are imported. The Nexilium system-menu runtime is not connected yet.")
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.white.opacity(0.7))
-                    .frame(maxWidth: 420)
-
-                Button("Return to Nexilium") {
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.white)
-                .foregroundStyle(.black)
-                .padding(.top, 8)
+        ConsoleHomeView(onExit: { dismiss() })
+            .statusBarHidden()
+            .onAppear {
+                orientationController.setLandscape()
             }
-            .padding(32)
-        }
-        .statusBarHidden()
-        .onAppear {
-            orientationController.setLandscape()
-        }
-        .onDisappear {
-            orientationController.setPortrait()
-        }
+            .onDisappear {
+                orientationController.setPortrait()
+            }
     }
 }
 
