@@ -24,6 +24,9 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Normalize app icon dimensions
+        run: sips -z 1024 1024 Nexilium/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+
       - name: Build for generic iOS device
         run: |
           xcodebuild \
