@@ -132,23 +132,46 @@ static bool writeGuestU64(NXEngine *engine, uint64_t address,
     return NXEngineWriteBytes(engine, address, bytes, sizeof(bytes));
 }
 
+static bool readSymbolName(NXEngine *engine,
+                            const NXLoadedNSO *module,
+                            const uint8_t symbol[24],
+                            char *name, size_t capacity) {
+    if (!engine || !module || !symbol || !name || capacity < 2 ||
+        module->stringTableAddress == 0)
+        return false;
+    const uint32_t nameOffset = readU32LE(symbol);
+    if (nameOffset >= module->stringTableSize) return false;
+
+    const uint64_t remaining = module->stringTableSize - nameOffset;
+    const size_t amount = remaining < capacity ? (size_t)remaining : capacity;
+    uint64_t address = 0;
+    if (addOverflowU64(module->stringTableAddress, nameOffset, &address) ||
+        !NXEngineReadBytes(engine, address, name, amount))
+        return false;
+
+    for (size_t i = 0; i < amount; ++i) {
+        if (name[i] == '\0') return true;
+    }
+    return false;
+}
+
 static bool resolveDynamicSymbol(NXEngine *engine, uint64_t loadBase,
-                                    uint64_t symbolTableAddress,
-                                    uint64_t symbolCount,
-                                    uint32_t symbolIndex,
-                                    uint64_t *symbolAddress) {
-    if (!symbolAddress) return false;
+                                 const NXLoadedNSO *current,
+                                 const NXNSORegistry *registry,
+                                 uint64_t symbolTableAddress,
+                                 uint64_t symbolCount,
+                                 uint32_t symbolIndex,
+                                 uint64_t *symbolAddress) {
+    if (!symbolAddress || !engine || !current) return false;
     if (symbolIndex == 0) {
         *symbolAddress = 0;
         return true;
     }
-    if (!engine || symbolTableAddress == 0 || symbolIndex >= symbolCount)
+    if (symbolTableAddress == 0 || symbolIndex >= symbolCount)
         return false;
 
-    uint64_t entryOffset = 0, entryAddress = 0;
-    if ((uint64_t)symbolIndex > UINT64_MAX / 24u)
-        return false;
-    entryOffset = (uint64_t)symbolIndex * 24u;
+    const uint64_t entryOffset = (uint64_t)symbolIndex * 24u;
+    uint64_t entryAddress = 0;
     if (addOverflowU64(symbolTableAddress, entryOffset, &entryAddress))
         return false;
 
@@ -157,27 +180,108 @@ static bool resolveDynamicSymbol(NXEngine *engine, uint64_t loadBase,
         return false;
     const uint16_t sectionIndex = readU16LE(symbol + 6);
     const uint64_t value = readU64LE(symbol + 8);
-    if (sectionIndex == 0) return false; /* Undefined import: needs rtld. */
-    if (sectionIndex == UINT16_C(0xFFF1)) { /* SHN_ABS */
-        *symbolAddress = value;
+    if (sectionIndex != 0) {
+        if (sectionIndex == UINT16_C(0xFFF1)) {
+            *symbolAddress = value;
+            return true;
+        }
+        return !addOverflowU64(loadBase, value, symbolAddress);
+    }
+
+    /* Undefined weak symbols resolve to zero when no provider is loaded. */
+    const uint8_t binding = symbol[4] >> 4;
+    if (binding == 2u && !registry) {
+        *symbolAddress = 0;
         return true;
     }
-    return !addOverflowU64(loadBase, value, symbolAddress);
+
+    char requestedName[512];
+    if (!readSymbolName(engine, current, symbol,
+                        requestedName, sizeof(requestedName))) {
+        if (binding == 2u) {
+            *symbolAddress = 0;
+            return true;
+        }
+        return false;
+    }
+
+    uint64_t weakAddress = 0;
+    bool foundWeak = false;
+    if (registry) {
+        const size_t moduleCount = registry->count < NX_NSO_MAX_MODULES
+            ? registry->count : NX_NSO_MAX_MODULES;
+        for (size_t moduleIndex = 0; moduleIndex < moduleCount; ++moduleIndex) {
+            const NXLoadedNSO *module = &registry->modules[moduleIndex];
+            if (module->loadBase == loadBase ||
+                module->symbolTableAddress == 0 ||
+                module->stringTableAddress == 0)
+                continue;
+
+            for (uint64_t index = 1; index < module->symbolCount; ++index) {
+                uint64_t providerEntryAddress = 0;
+                if (addOverflowU64(module->symbolTableAddress,
+                                   index * 24u, &providerEntryAddress))
+                    break;
+                uint8_t providerSymbol[24];
+                if (!NXEngineReadBytes(engine, providerEntryAddress,
+                                       providerSymbol, sizeof(providerSymbol)))
+                    break;
+
+                const uint16_t providerSection = readU16LE(providerSymbol + 6);
+                const uint8_t providerBinding = providerSymbol[4] >> 4;
+                if (providerSection == 0 ||
+                    (providerBinding != 1u && providerBinding != 2u))
+                    continue;
+
+                char providerName[512];
+                if (!readSymbolName(engine, module, providerSymbol,
+                                    providerName, sizeof(providerName)) ||
+                    strcmp(requestedName, providerName) != 0)
+                    continue;
+
+                const uint64_t providerValue = readU64LE(providerSymbol + 8);
+                uint64_t resolved = providerValue;
+                if (providerSection != UINT16_C(0xFFF1) &&
+                    addOverflowU64(module->loadBase, providerValue, &resolved))
+                    continue;
+
+                if (providerBinding == 1u) {
+                    *symbolAddress = resolved;
+                    return true;
+                }
+                if (!foundWeak) {
+                    weakAddress = resolved;
+                    foundWeak = true;
+                }
+            }
+        }
+    }
+
+    if (foundWeak) {
+        *symbolAddress = weakAddress;
+        return true;
+    }
+    if (binding == 2u) {
+        *symbolAddress = 0;
+        return true;
+    }
+    return false;
 }
 
 static bool applyAArch64AbsoluteRelocation(
     NXEngine *engine, uint64_t loadBase, const NXLoadedNSO *image,
     uint64_t targetOffset, uint32_t type, uint32_t symbolIndex,
     int64_t addend, uint64_t symbolTableAddress, uint64_t symbolCount,
-    NXLoadedNSO *stats) {
+    const NXNSORegistry *registry, NXLoadedNSO *stats) {
     uint64_t targetAddress = 0, symbolAddress = 0, value = 0;
     if (addOverflowU64(loadBase, targetOffset, &targetAddress))
         return false;
 
     if (type == 257u) { /* R_AARCH64_ABS64 */
         if (!addressInImage(image, targetAddress, 8)) return false;
-        if (!resolveDynamicSymbol(engine, loadBase, symbolTableAddress,
-                                  symbolCount, symbolIndex, &symbolAddress)) {
+        if (!resolveDynamicSymbol(engine, loadBase, image, registry,
+                                  symbolTableAddress, symbolCount,
+                                  symbolIndex, &symbolAddress)) {
             ++stats->unsupportedRelocationCount;
             return true; /* Undefined imports still require rtld. */
         }
