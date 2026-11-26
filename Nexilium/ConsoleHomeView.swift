@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ConsoleHomeView: View {
+    var onExit: (() -> Void)? = nil
     @State private var showingMiiCreator = false
     @State private var selectedSection: ConsoleSection?
 
@@ -25,9 +26,22 @@ struct ConsoleHomeView: View {
                             .foregroundStyle(.white)
                     }
                     Spacer()
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 27))
-                        .foregroundStyle(.white.opacity(0.85))
+                    HStack(spacing: 18) {
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 27))
+                            .foregroundStyle(.white.opacity(0.85))
+                        if let onExit {
+                            Button(action: onExit) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .padding(10)
+                                    .background(.white.opacity(0.12), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Exit system menu")
+                        }
+                    }
                 }
 
                 Spacer(minLength: 0)
