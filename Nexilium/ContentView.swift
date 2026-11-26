@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
@@ -109,7 +110,7 @@ private struct FirmwareInstallerView: View {
     var body: some View {
         Form {
             Section("Nintendo Switch firmware") {
-                LabeledContent("Firmware package", value: firmwareImported ? firmwareFilename : "Not installed")
+                LabeledContent("Firmware package", value: firmwareImported ? "Imported: " + firmwareFilename : "Not imported")
                 Button {
                     importingFirmware = true
                 } label: {
@@ -118,7 +119,7 @@ private struct FirmwareInstallerView: View {
             }
 
             Section("Product keys") {
-                LabeledContent("prod.keys", value: prodKeysImported ? prodKeysFilename : "Not installed")
+                LabeledContent("prod.keys", value: prodKeysImported ? "Imported" : "Not imported")
                 Button {
                     importingKeys = true
                 } label: {
@@ -127,7 +128,7 @@ private struct FirmwareInstallerView: View {
             }
 
             Section {
-                Text("Select firmware and keys dumped from a Nintendo Switch you own. Nexilium only imports the files here; firmware extraction and system-menu emulation are not implemented yet.")
+                Text("Select firmware and keys dumped from a Nintendo Switch you own. Nexilium imports the files here; firmware extraction and system-menu emulation are not implemented yet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -162,8 +163,7 @@ private struct FirmwareInstallerView: View {
             allowedContentTypes: [.plainText, .data],
             allowsMultipleSelection: false
         ) { result in
-            handleImport(result, expectedExtension: "keys", destinationName: "prod.keys") { name in
-                prodKeysFilename = name
+            handleImport(result, expectedExtension: "keys", destinationName: "prod.keys") { _ in
                 prodKeysImported = true
             }
         }
@@ -208,7 +208,7 @@ private struct FirmwareInstallerView: View {
 
 private struct SystemMenuView: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var orientationController = LandscapeOrientationController()
+    private let orientationController = LandscapeOrientationController()
 
     var body: some View {
         ZStack {
