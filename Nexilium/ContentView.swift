@@ -3,91 +3,15 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @State private var selectedTab = 0
-
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            NavigationStack {
-                HomeView(selectedTab: $selectedTab)
-            }
-            .tabItem {
-                Label("Home", systemImage: "house")
-            }
-            .tag(0)
-
-            NavigationStack {
-                Color(uiColor: .systemBackground)
-                    .navigationTitle("Library")
-                    .navigationBarTitleDisplayMode(.large)
-            }
-            .tabItem {
-                Label("Library", systemImage: "square.grid.2x2")
-            }
-            .tag(1)
-
-            NavigationStack {
-                SettingsView()
-            }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .tag(2)
-        }
-    }
-}
-
-private struct HomeView: View {
-    @Binding var selectedTab: Int
-    @AppStorage("system.firmwareImported") private var firmwareImported = false
-    @AppStorage("system.prodKeysImported") private var prodKeysImported = false
-    @AppStorage("system.titleKeysImported") private var titleKeysImported = false
     @State private var showFirmwareInstaller = false
 
-    // The mock ConsoleHomeView is deliberately not exposed as a Switch System Menu.
-    // Enable this action only when the real HOS boot pipeline is connected.
-    private var systemMenuReady: Bool {
-        firmwareImported && prodKeysImported &&
-        NexiliumEngine.systemMenuBootSupported
-    }
-
     var body: some View {
-        Color(uiColor: .systemBackground)
-            .navigationTitle("Nexilium")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button {
-                            selectedTab = 2
-                        } label: {
-                            Label("Settings", systemImage: "gearshape")
-                        }
-
-                        Button {
-                            showFirmwareInstaller = true
-                        } label: {
-                            Label("Install Nintendo Switch firmware", systemImage: "square.and.arrow.down")
-                        }
-
-                        Button {} label: {
-                            Label("Launch System Menu", systemImage: "play")
-                        }
-                        .disabled(!systemMenuReady)
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 18, weight: .semibold))
-                            .frame(width: 36, height: 36)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityLabel("Home menu")
-                }
-            }
-            .sheet(isPresented: $showFirmwareInstaller) {
-                NavigationStack {
-                    FirmwareInstallerView()
-                }
-            }
-
+        ConsoleHomeView(onFirmware: {
+            showFirmwareInstaller = true
+        })
+        .sheet(isPresented: $showFirmwareInstaller) {
+            NavigationStack { FirmwareInstallerView() }
+        }
     }
 }
 
