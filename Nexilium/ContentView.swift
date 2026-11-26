@@ -118,8 +118,14 @@ private struct FirmwareInstallerView: View {
             }
         }
 
-        var expectedExtension: String {
-            self == .firmware ? "zip" : "keys"
+        var allowedContentTypes: [UTType] {
+            switch self {
+            case .firmware:
+                return [.zip, .folder]
+            case .prodKeys, .titleKeys:
+                let keysType = UTType(filenameExtension: "keys", conformingTo: .data) ?? .data
+                return [keysType, .folder]
+            }
         }
 
         var displayName: String {
@@ -186,10 +192,18 @@ private struct FirmwareInstallerView: View {
         }
         .fileImporter(
             isPresented: $isImporterPresented,
-            allowedContentTypes: [.item, .folder],
+            allowedContentTypes: importTarget.allowedContentTypes,
             allowsMultipleSelection: false
         ) { result in
             handleImport(result)
+        }
+        .alert("Import failed", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "The selected file couldn't be imported.")
         }
     }
 
