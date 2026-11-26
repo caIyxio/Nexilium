@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "Arm64/cpu.h"
 #include "NXCPU.h"
+#include "NXVFS.h"
 
 #define NX_MAX_MEMORY_REGIONS 64
 
@@ -62,6 +63,7 @@ typedef struct Machine {
     uint64_t tlsBase;
     uint32_t nextHandle;
     NXSessionHandle handles[NX_MAX_SESSION_HANDLES];
+    NXVFS vfs;
 } Machine;
 
 typedef struct {
