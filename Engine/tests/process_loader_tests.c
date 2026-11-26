@@ -54,17 +54,49 @@ static void buildNSO(uint8_t *nso, size_t size) {
     memcpy(nso+0x101,movz,sizeof(movz));
 }
 
+static void buildExeFSPFS0(uint8_t *pfs, size_t size,
+                            const uint8_t *npdm, size_t npdmSize,
+                            const uint8_t *nso, size_t nsoSize) {
+    memset(pfs,0,size);
+    memcpy(pfs,"PFS0",4);
+    put32(pfs+4,2);
+    put32(pfs+8,14);
+    const size_t dataOffset=0x10+2*0x18+14;
+    put64(pfs+0x10,0);
+    put64(pfs+0x18,npdmSize);
+    put32(pfs+0x20,0);
+    put64(pfs+0x28,npdmSize);
+    put64(pfs+0x30,nsoSize);
+    put32(pfs+0x38,10);
+    memcpy(pfs+0x40,"main.npdm",10);
+    memcpy(pfs+0x4A,"main",5);
+    memcpy(pfs+dataOffset,npdm,npdmSize);
+    memcpy(pfs+dataOffset+npdmSize,nso,nsoSize);
+}
+
+static bool openProgramFiles(const uint8_t *pfs, size_t pfsSize,
+                             NXPFS0File *npdmFile, NXPFS0File *mainFile) {
+    NXPFS0View view;
+    return NXEngineOpenPFS0(pfs,pfsSize,&view) &&
+           NXEnginePFS0GetFile(&view,"main.npdm",npdmFile) &&
+           NXEnginePFS0GetFile(&view,"main",mainFile);
+}
+
 static void testPrepareMainThread(void) {
     uint8_t npdm[0x400];
     uint8_t nso[0x105];
+    uint8_t pfs[0x600];
+    NXPFS0File npdmFile, mainFile;
     buildNPDM(npdm,sizeof(npdm));
     buildNSO(nso,sizeof(nso));
+    buildExeFSPFS0(pfs,sizeof(pfs),npdm,sizeof(npdm),nso,sizeof(nso));
+    CHECK(openProgramFiles(pfs,sizeof(pfs),&npdmFile,&mainFile));
 
     NXEngine engine;
     CHECK(NXEngineInit(&engine));
     NXPreparedProcess prepared;
     CHECK(NXEnginePrepareMainThread(
-        &engine,npdm,sizeof(npdm),nso,sizeof(nso),
+        &engine,npdmFile.bytes,npdmFile.size,mainFile.bytes,mainFile.size,
         UINT64_C(0x7100000000),&prepared
     ));
     CHECK(prepared.titleID==UINT64_C(0x0100000000001000));
@@ -83,15 +115,19 @@ static void testPrepareMainThread(void) {
 static void testRejectUnsupportedProcess(void) {
     uint8_t npdm[0x400];
     uint8_t nso[0x105];
+    uint8_t pfs[0x600];
+    NXPFS0File npdmFile, mainFile;
     buildNPDM(npdm,sizeof(npdm));
     buildNSO(nso,sizeof(nso));
     npdm[0x0F]=1; /* Unsupported secondary core. */
+    buildExeFSP0(pfs,sizeof(pfs),npdm,sizeof(npdm),nso,sizeof(nso));
+    CHECK(openProgramFiles(pfs,sizeof(pfs),&npdmFile,&mainFile));
 
     NXEngine engine;
     CHECK(NXEngineInit(&engine));
     NXPreparedProcess prepared;
     CHECK(!NXEnginePrepareMainThread(
-        &engine,npdm,sizeof(npdm),nso,sizeof(nso),
+        &engine,npdmFile.bytes,npdmFile.size,mainFile.bytes,mainFile.size,
         UINT64_C(0x7100000000),&prepared
     ));
     NXEngineDestroy(&engine);
