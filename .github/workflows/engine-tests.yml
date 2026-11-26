@@ -47,3 +47,14 @@ jobs:
             -lm -latomic -o engine-format-tests
       - name: Run PFS0 and guest-memory regression tests
         run: ./engine-format-tests
+
+      - name: Compile read-only RomFS parser tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine \
+            Engine/NXRomFS.c \
+            Engine/tests/romfs_tests.c \
+            -o romfs-tests
+      - name: Run RomFS regression tests
+        run: ./romfs-tests
