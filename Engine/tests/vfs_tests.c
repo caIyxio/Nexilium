@@ -42,6 +42,59 @@ static size_t buildPFS0(uint8_t *image, size_t capacity) {
     return totalSize;
 }
 
+static void buildRomFS(uint8_t *image, size_t size) {
+    memset(image,0,size);
+    put64(image+0,0x50);
+    put64(image+8,0x50);
+    put64(image+16,4);
+    put64(image+24,0x54);
+    put64(image+32,56);
+    put64(image+40,0x8C);
+    put64(image+48,4);
+    put64(image+56,0x90);
+    put64(image+64,40);
+    put64(image+72,0xB8);
+    put32(image+0x50,24);
+    put32(image+0x8C,0);
+    put32(image+0x54,UINT32_C(0xFFFFFFFF));
+    put32(image+0x58,UINT32_C(0xFFFFFFFF));
+    put32(image+0x5C,24);
+    put32(image+0x60,UINT32_C(0xFFFFFFFF));
+    put32(image+0x64,UINT32_C(0xFFFFFFFF));
+    put32(image+0x68,0);
+    put32(image+0x6C,0);
+    put32(image+0x70,UINT32_C(0xFFFFFFFF));
+    put32(image+0x74,UINT32_C(0xFFFFFFFF));
+    put32(image+0x78,0);
+    put32(image+0x7C,UINT32_C(0xFFFFFFFF));
+    put32(image+0x80,5);
+    memcpy(image+0x84,"romfs",5);
+    put32(image+0x90,24);
+    put32(image+0x94,UINT32_C(0xFFFFFFFF));
+    put64(image+0x98,0);
+    put64(image+0xA0,3);
+    put32(image+0xA8,UINT32_C(0xFFFFFFFF));
+    put32(image+0xAC,8);
+    memcpy(image+0xB0,"boot.bin",8);
+    memcpy(image+0xB8,"abc",3);
+}
+
+static void testRomFSMountAndRead(void) {
+    uint8_t image[0xBB];
+    buildRomFS(image,sizeof(image));
+    NXVFS vfs;
+    NXVFSInit(&vfs);
+    CHECK(NXVFSMountRomFS(&vfs,"romfs",image,sizeof(image)));
+    NXVFSFile file;
+    CHECK(NXVFSOpenFile(&vfs,"romfs","/romfs/boot.bin",&file));
+    CHECK(file.size==3);
+    uint8_t output[3]={0};
+    size_t bytesRead=0;
+    CHECK(NXVFSReadFile(&file,0,output,sizeof(output),&bytesRead));
+    CHECK(bytesRead==3);
+    CHECK(memcmp(output,"abc",3)==0);
+}
+
 static void testPFS0MountAndRead(void) {
     uint8_t image[0x100];
     size_t imageSize=buildPFS0(image,sizeof(image));
@@ -81,6 +134,7 @@ static void testRejectMalformedMount(void) {
 
 int main(void) {
     testPFS0MountAndRead();
+    testRomFSMountAndRead();
     testRejectMalformedMount();
     if (failures) {
         fprintf(stderr,"%d VFS test(s) failed\n",failures);
