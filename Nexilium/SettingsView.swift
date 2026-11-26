@@ -125,8 +125,8 @@ private struct GraphicsSettingsView: View {
 
                 MemoryBudgetStatusView()
 
-                LabeledContent("Increased memory limit", value: "Runtime budget check")
-                Text("iOS does not provide a public API to read the increased-memory entitlement directly. Nexilium checks the live memory available to this app instead; that value reflects the active process limit, but cannot prove which entitlement granted it.")
+                LabeledContent("Increased memory entitlement", value: "Not directly readable on iOS")
+                Text("Apple provides no public iOS API for querying this entitlement as a Boolean. The live memory figure below is the supported runtime signal: it reports memory currently available to Nexilium, but it cannot prove whether the entitlement is present. For a signed build, inspect the app’s code-signature entitlements on the build machine.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
