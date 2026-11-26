@@ -18,6 +18,7 @@ struct FirmwareSystemMenuAssets: Codable {
     let mainNSOPath: String
     let npdmPath: String
     let romFSPath: String?
+    let modulePaths: [String]
     let mainNSOBytes: UInt64
     let romFSBytes: UInt64?
 }
@@ -347,6 +348,20 @@ enum FirmwarePackageInstaller {
                         romFSBytes = UInt64(romFS.count)
                     }
 
+                    let modulesDirectory = outputDirectory
+                        .appendingPathComponent("modules", isDirectory: true)
+                    try FileManager.default.createDirectory(
+                        at: modulesDirectory,
+                        withIntermediateDirectories: true
+                    )
+                    var modulePaths: [String] = []
+                    for (index, module) in program.modules.enumerated() {
+                        let filename = String(format: "module-%02d.nso", index)
+                        let moduleURL = modulesDirectory.appendingPathComponent(filename)
+                        try module.image.write(to: moduleURL, options: .atomic)
+                        modulePaths.append("system-menu/modules/\(filename)")
+                    }
+
                     return (
                         FirmwareSystemMenuAssets(
                             ncaPath: candidate.path,
@@ -354,6 +369,7 @@ enum FirmwarePackageInstaller {
                             mainNSOPath: "system-menu/main.nso",
                             npdmPath: "system-menu/main.npdm",
                             romFSPath: romFSPath,
+                            modulePaths: modulePaths,
                             mainNSOBytes: UInt64(program.mainNSO.count),
                             romFSBytes: romFSBytes
                         ),
