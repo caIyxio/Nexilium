@@ -501,6 +501,7 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
                                          uint64_t loadBase,
                                          uint64_t textAddress,
                                          uint32_t textSize,
+                                         const NXNSORegistry *registry,
                                          NXLoadedNSO *image) {
     if (!engine || !image || textSize < 8u) return true;
 
@@ -537,7 +538,9 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
     uint64_t relOffset = 0, relSize = 0, relEntrySize = 0;
     uint64_t relrOffset = 0, relrSize = 0, relrEntrySize = 0;
     uint64_t hashOffset = 0, symtabOffset = 0, symEntrySize = 0;
+    uint64_t strtabOffset = 0, strtabSize = 0;
     bool hasHash = false, hasSymtab = false, hasSymEntrySize = false;
+    bool hasStrtab = false, hasStrtabSize = false;
     const uint64_t maxEntries = image->imageSize / 16u;
     bool terminated = false;
 
@@ -566,6 +569,8 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
             case 4:  hashOffset = value; hasHash = true; break; /* DT_HASH */
             case 6:  symtabOffset = value; hasSymtab = true; break; /* DT_SYMTAB */
             case 11: symEntrySize = value; hasSymEntrySize = true; break; /* DT_SYMENT */
+            case 5:  strtabOffset = value; hasStrtab = true; break; /* DT_STRTAB */
+            case 10: strtabSize = value; hasStrtabSize = true; break; /* DT_STRSZ */
             case 35: relrSize = value; break;     /* DT_RELRSZ */
             case 36: relrOffset = value; break;   /* DT_RELR */
             case 37: relrEntrySize = value; break; /* DT_RELRENT */
@@ -587,18 +592,31 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
             addOverflowU64(loadBase, symtabOffset, &symbolTableAddress))
             return false;
         symbolCount = readU32LE(hashHeader + 4);
-        if (symbolCount > UINT64_MAX / 24u ||
+        if (symbolCount > SIZE_MAX / 24u ||
             !addressInImage(image, symbolTableAddress,
                             (size_t)(symbolCount * 24u)))
             return false;
     }
+
+    uint64_t stringTableAddress = 0;
+    if (hasStrtab && hasStrtabSize) {
+        if (strtabSize > SIZE_MAX ||
+            addOverflowU64(loadBase, strtabOffset, &stringTableAddress) ||
+            !addressInImage(image, stringTableAddress, (size_t)strtabSize))
+            return false;
+        image->stringTableAddress = stringTableAddress;
+        image->stringTableSize = strtabSize;
+    }
+    image->symbolTableAddress = symbolTableAddress;
+    image->symbolCount = symbolCount;
 
     if (relaSize != 0) {
         uint64_t tableAddress = 0;
         if (relaEntrySize != 24u ||
             addOverflowU64(loadBase, relaOffset, &tableAddress) ||
             !applyRelaTable(engine, loadBase, image, tableAddress,
-                            relaSize, symbolTableAddress, symbolCount, image))
+                            relaSize, symbolTableAddress, symbolCount,
+                            registry, image))
             return false;
     }
     if (relSize != 0) {
@@ -606,7 +624,8 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
         if (relEntrySize != 16u ||
             addOverflowU64(loadBase, relOffset, &tableAddress) ||
             !applyRelTable(engine, loadBase, image, tableAddress,
-                           relSize, symbolTableAddress, symbolCount, image))
+                           relSize, symbolTableAddress, symbolCount,
+                           registry, image))
             return false;
     }
     if (relrSize != 0) {
