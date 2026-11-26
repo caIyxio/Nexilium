@@ -105,3 +105,23 @@ jobs:
             -o npdm-tests
       - name: Run NPDM metadata validation tests
         run: ./npdm-tests
+
+      - name: Compile NPDM and NSO process preparation tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine -I Engine/Arm64 \
+            Engine/NXMachine.c \
+            Engine/NXHorizon.c \
+            Engine/NXNSO.c \
+            Engine/NXPFS0.c \
+            Engine/NXNPDM.c \
+            Engine/NXProcess.c \
+            Engine/Arm64/cpu.c \
+            Engine/Arm64/decode.c \
+            Engine/Arm64/exec_fpsimd.c \
+            Engine/Arm64/sysreg.c \
+            Engine/tests/process_loader_tests.c \
+            -lm -latomic -o process-loader-tests
+      - name: Run NPDM and NSO process preparation tests
+        run: ./process-loader-tests
