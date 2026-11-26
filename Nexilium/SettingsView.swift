@@ -1,5 +1,6 @@
 import SwiftUI
 import os
+import AppEntitlements
 
 struct SettingsView: View {
     var body: some View {
@@ -123,10 +124,10 @@ private struct GraphicsSettingsView: View {
                     Text("4 GB").tag("4 GB")
                 }
 
+                MemoryEntitlementStatusView()
                 MemoryBudgetStatusView()
 
-                LabeledContent("Increased memory entitlement", value: "Not directly readable on iOS")
-                Text("Apple provides no public iOS API for querying this entitlement as a Boolean. The live memory figure below is the supported runtime signal: it reports memory currently available to Nexilium, but it cannot prove whether the entitlement is present. For a signed build, inspect the app’s code-signature entitlements on the build machine.")
+                Text("Entitlement status is read from Nexilium’s Mach-O code signature. Unsigned development builds may not contain a readable signature, so the result can be unavailable.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -143,6 +144,28 @@ private struct GraphicsSettingsView: View {
         }
         .navigationTitle("Graphics")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct MemoryEntitlementStatusView: View {
+    private let entitlementKey = "com.apple.developer.kernel.increased-memory-limit"
+
+    private var status: String {
+        do {
+            guard let enabled = try AppEntitlements.getValue(
+                for: entitlementKey,
+                as: Bool.self
+            ) else {
+                return "Not present"
+            }
+            return enabled ? "Enabled" : "Disabled"
+        } catch {
+            return "Unavailable in this build"
+        }
+    }
+
+    var body: some View {
+        LabeledContent("Increased memory entitlement", value: status)
     }
 }
 
