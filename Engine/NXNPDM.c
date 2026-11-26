@@ -66,7 +66,7 @@ bool NXEngineOpenNPDM(const uint8_t *image, size_t imageSize,
 
     /* ACID's declared size excludes its fixed 0x200-byte signature/key prefix. */
     if (acidDeclaredSize > acidSize - 0x200u ||
-        acidDeclaredSize < 0x38u ||
+        acidDeclaredSize < 0x40u ||
         titleIDMin > titleIDMax ||
         titleID < titleIDMin || titleID > titleIDMax ||
         !subrangeFits(aci0SACOffset, aci0SACSize, aci0Size,
