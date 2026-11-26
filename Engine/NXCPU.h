@@ -18,6 +18,7 @@ typedef enum {
 
 const char *NXCPUBackendName(void);
 int NXCPUSelfTest(void);
+int NXEngineCanBootSystemMenu(void);
 
 #ifdef __cplusplus
 }
