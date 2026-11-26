@@ -16,8 +16,6 @@ concurrency:
 jobs:
   build:
     timeout-minutes: 40
-    # The arm64 macOS hosted pool has been failing to provision.
-    # Use the Intel pool as a temporary workaround.
     runs-on: macos-15-intel
     steps:
       - name: Check out repository
@@ -39,7 +37,6 @@ jobs:
         id: xcode-version
         run: echo "version=$(xcodebuild -version | awk 'NR==1 {print $2}')" >> "$GITHUB_OUTPUT"
 
-      # Preserve Swift module caches, package checkouts, compiled objects and products between builds.
       - name: Restore Xcode derived data
         uses: actions/cache@v4
         with:
@@ -60,10 +57,11 @@ jobs:
             -scheme Nexilium \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
-            -jobs 4 \
+            -jobs 2 \
             CODE_SIGNING_ALLOWED=NO \
-            SWIFT_ENABLE_BATCH_MODE=YES \
+            SWIFT_ENABLE_BATCH_MODE=NO \
             SWIFT_COMPILATION_MODE=incremental \
+            OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -warn-long-expression-type-checking=200 -Xfrontend -warn-long-function-bodies=500' \
             -showBuildTimingSummary \
             build
 
