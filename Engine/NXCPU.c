@@ -107,7 +107,7 @@ int NXCPUSelfTest(void) {
         &svcEngine.cpu, NX_TLS_BASE + NX_HIPC_TLS_OFFSET, 0x100,
         ACC_READ | ACC_WRITE
     );
-    bool ipcOK = hipc != NULL && connectResult == NX_RESULT_SUCCESS && smHandle != 0;
+    bool ipcOK = hipc != NULL && connectResult == 0 && smHandle != 0;
     if (ipcOK) {
         memset(hipc, 0, 0x100);
         uint32_t header0 = 4;
@@ -122,9 +122,9 @@ int NXCPUSelfTest(void) {
         uint32_t responseMagic = 0, responseResult = UINT32_MAX;
         memcpy(&responseMagic, hipc + 0x10, sizeof(responseMagic));
         memcpy(&responseResult, hipc + 0x18, sizeof(responseResult));
-        ipcOK = ipcResult == NX_RESULT_SUCCESS &&
+        ipcOK = ipcResult == 0 &&
                 responseMagic == UINT32_C(0x4F434653) &&
-                responseResult == NX_RESULT_SUCCESS;
+                responseResult == 0;
     }
     NXHorizonCloseHandle(&svcEngine, smHandle);
     if (!svcOK || !ipcOK) {
