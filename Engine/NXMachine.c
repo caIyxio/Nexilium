@@ -167,6 +167,7 @@ bool NXEngineInit(NXEngine *engine) {
     cpu_reset(&engine->cpu, 0, 0);
     engine->machine.tlsBase = NX_TLS_BASE;
     engine->machine.nextHandle = 1;
+    NXVFSInit(&engine->machine.vfs);
     engine->initialized = true;
 
     if (!NXEngineMapMemory(engine, NX_TLS_BASE, NX_TLS_SIZE,
