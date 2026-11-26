@@ -3,6 +3,7 @@
 #include "Arm64/mmu.h"
 
 #include <inttypes.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -102,18 +103,6 @@ static uint32_t setHeapSize(NXEngine *engine, uint64_t requested, uint64_t *outB
     return NX_RESULT_SUCCESS;
 }
 
-static bool readGuestString(CPU *cpu, uint64_t address, char *buffer, size_t capacity) {
-    if (!buffer || capacity == 0) return false;
-    for (size_t i = 0; i < capacity; ++i) {
-        uint64_t byte = 0;
-        if (!mem_read(cpu, address + i, 1, &byte)) return false;
-        buffer[i] = (char)byte;
-        if (buffer[i] == '\0') return true;
-    }
-    buffer[capacity - 1] = '\0';
-    return false;
-}
-
 bool NXHorizonDispatchSVC(NXEngine *engine, uint16_t serviceID) {
     if (!engine || !engine->initialized) return false;
     CPU *cpu = &engine->cpu;
@@ -144,7 +133,7 @@ bool NXHorizonDispatchSVC(NXEngine *engine, uint16_t serviceID) {
                     .tv_sec = (time_t)(nanoseconds / INT64_C(1000000000)),
                     .tv_nsec = (long)(nanoseconds % INT64_C(1000000000))
                 };
-                while (nanosleep(&request, &request) != 0) { }
+                while (nanosleep(&request, &request) != 0 && errno == EINTR) { }
             }
             cpu->x[0] = NX_RESULT_SUCCESS;
             return true;
