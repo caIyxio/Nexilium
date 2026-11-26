@@ -61,5 +61,7 @@ bool NXVFSReadFile(const NXVFSFile *file, uint64_t offset,
 bool NXVFSReadDirectory(const NXVFS *vfs, const char *mountName,
                         const char *path, size_t index,
                         NXVFSDirectoryItem *item);
+bool NXVFSIsDirectory(const NXVFS *vfs, const char *mountName,
+                      const char *path);
 
 #endif
