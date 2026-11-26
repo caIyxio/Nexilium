@@ -24,12 +24,14 @@ final class NexiliumGuestProcess {
     private var engine = NXEngine()
     private var initialized = false
     private var mountedFileSystemImages: [Data] = []
+    private var moduleRegistry = NXNSORegistry()
     private(set) var preparedProcess: NXPreparedProcess?
 
     init() throws {
         guard NXEngineInit(&engine) else {
             throw NexiliumGuestProcessError.engineInitializationFailed
         }
+        NXNSORegistryInit(&moduleRegistry)
         initialized = true
     }
 
@@ -40,6 +42,14 @@ final class NexiliumGuestProcess {
     }
 
     func load(_ image: NCAProgramImage, at loadBase: UInt64) throws {
+        try prepare(image, at: loadBase, usingRegistry: false)
+    }
+
+    private func prepare(
+        _ image: NCAProgramImage,
+        at loadBase: UInt64,
+        usingRegistry: Bool
+    ) throws {
         var prepared = NXPreparedProcess()
         let loaded = image.npdm.withUnsafeBytes { npdmBuffer -> Bool in
             guard let npdmBytes = npdmBuffer.bindMemory(to: UInt8.self).baseAddress else {
@@ -48,6 +58,18 @@ final class NexiliumGuestProcess {
             return image.mainNSO.withUnsafeBytes { nsoBuffer -> Bool in
                 guard let nsoBytes = nsoBuffer.bindMemory(to: UInt8.self).baseAddress else {
                     return false
+                }
+                if usingRegistry {
+                    return NXEnginePrepareMainThreadWithRegistry(
+                        &engine,
+                        npdmBytes,
+                        image.npdm.count,
+                        nsoBytes,
+                        image.mainNSO.count,
+                        loadBase,
+                        &moduleRegistry,
+                        &prepared
+                    )
                 }
                 return NXEnginePrepareMainThread(
                     &engine,
@@ -77,10 +99,14 @@ final class NexiliumGuestProcess {
         let romFSURL = assets.romFSPath.map {
             storageDirectory.appendingPathComponent($0)
         }
+        let moduleURLs = assets.modulePaths.map {
+            storageDirectory.appendingPathComponent($0)
+        }
         let image = try NCAProgramImageReader.loadExtracted(
             mainNSOURL: mainURL,
             npdmURL: npdmURL,
-            romFSURL: romFSURL
+            romFSURL: romFSURL,
+            moduleURLs: moduleURLs
         )
         guard image.metadata.titleID == assets.titleID,
               image.metadata.titleID == 0x0100000000001000 else {
@@ -104,7 +130,34 @@ final class NexiliumGuestProcess {
             mountedFileSystemImages.append(romFS)
         }
 
-        try load(image, at: loadBase)
+        guard image.modules.count < 32, moduleRegistry.count == 0 else {
+            throw NexiliumGuestProcessError.invalidSystemMenuAssets
+        }
+
+        /* Load ExeFS dependency NSOs first so the main image can resolve them. */
+        for (index, module) in image.modules.enumerated() {
+            let moduleBase = UInt64(0x7200000000) +
+                             UInt64(index) * UInt64(0x20000000)
+            var loadedModule = NXLoadedNSO()
+            let moduleLoaded = module.image.withUnsafeBytes { rawBuffer -> Bool in
+                guard let bytes = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
+                    return false
+                }
+                return NXEngineLoadNSOWithRegistry(
+                    &engine,
+                    bytes,
+                    module.image.count,
+                    moduleBase,
+                    &moduleRegistry,
+                    &loadedModule
+                )
+            }
+            guard moduleLoaded else {
+                throw NexiliumGuestProcessError.invalidProgramImage
+            }
+        }
+
+        try prepare(image, at: loadBase, usingRegistry: true)
     }
 
     @discardableResult
