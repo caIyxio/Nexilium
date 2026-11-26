@@ -303,7 +303,8 @@ static bool hipcGetBufferDescriptor(const uint8_t *buffer,
     const size_t exchangeOffset = receiveOffset + receiveCount * 12u;
     size_t descriptorOffset = 0;
 
-    if (bufferType == 0x9u) {
+    if (bufferType == 0x9u || bufferType == 0x19u) {
+        /* Both input pointer buffer variants use the 8-byte PointerData descriptor. */
         if (index >= pointerCount) return false;
         descriptorOffset = pointerOffset + (size_t)index * 8u;
         const uint32_t data0 = readU32LE(buffer + descriptorOffset);
@@ -312,16 +313,6 @@ static bool hipcGetBufferDescriptor(const uint8_t *buffer,
         *address = (uint64_t)data1 |
                    ((uint64_t)((data0 >> 12) & 0xFu) << 32) |
                    ((uint64_t)((data0 >> 6) & 0x7u) << 36);
-    } else if (bufferType == 0x19u) {
-        if (index >= sendCount) return false;
-        descriptorOffset = sendOffset + (size_t)index * 12u;
-        const uint32_t data0 = readU32LE(buffer + descriptorOffset);
-        const uint32_t data1 = readU32LE(buffer + descriptorOffset + 4u);
-        const uint32_t data2 = readU32LE(buffer + descriptorOffset + 8u);
-        *size = (uint64_t)data0 | ((uint64_t)((data2 >> 24) & 0xFu) << 32);
-        *address = (uint64_t)data1 |
-                   ((uint64_t)((data2 >> 28) & 0xFu) << 32) |
-                   ((uint64_t)((data2 >> 2) & 0x7u) << 36);
     } else if (bufferType == 0x6u) {
         if (index >= receiveCount) return false;
         descriptorOffset = receiveOffset + (size_t)index * 12u;
