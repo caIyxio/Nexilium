@@ -113,8 +113,9 @@ static bool readDirectory(const NXRomFSView *view, uint32_t offset,
 
     const uint8_t *raw = view->image + view->dirTableOffset + offset;
     const uint32_t nameLength = readU32LE(raw + 20);
+    if ((size_t)nameLength > SIZE_MAX - NX_ROMFS_DIR_ENTRY_SIZE - 3u)
+        return false;
     const size_t rawLength = NX_ROMFS_DIR_ENTRY_SIZE + (size_t)nameLength;
-    if (rawLength > SIZE_MAX - 3u) return false;
     const size_t paddedLength = (rawLength + 3u) & ~(size_t)3u;
     if (!rangeFits((size_t)offset, paddedLength, view->dirTableSize))
         return false;
@@ -138,8 +139,9 @@ static bool readFile(const NXRomFSView *view, uint32_t offset,
 
     const uint8_t *raw = view->image + view->fileTableOffset + offset;
     const uint32_t nameLength = readU32LE(raw + 28);
+    if ((size_t)nameLength > SIZE_MAX - NX_ROMFS_FILE_ENTRY_SIZE - 3u)
+        return false;
     const size_t rawLength = NX_ROMFS_FILE_ENTRY_SIZE + (size_t)nameLength;
-    if (rawLength > SIZE_MAX - 3u) return false;
     const size_t paddedLength = (rawLength + 3u) & ~(size_t)3u;
     if (!rangeFits((size_t)offset, paddedLength, view->fileTableSize))
         return false;
@@ -189,7 +191,7 @@ static bool findDirectory(const NXRomFSView *view, uint32_t parentOffset,
         }
         offset = entry.nextHash;
     }
-    return offset == NX_ROMFS_NONE ? false : false;
+    return false;
 }
 
 static bool findFile(const NXRomFSView *view, uint32_t parentOffset,
