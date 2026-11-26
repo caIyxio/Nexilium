@@ -14,6 +14,11 @@ typedef struct {
     uint32_t rodataSize;
     uint32_t dataSize;
     uint32_t bssSize;
+    uint64_t moduleHeaderAddress;
+    uint64_t dynamicAddress;
+    uint32_t relativeRelocationCount;
+    uint32_t unsupportedRelocationCount;
+    bool hasModuleHeader;
 } NXLoadedNSO;
 
 bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
