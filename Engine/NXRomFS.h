@@ -26,6 +26,13 @@ typedef struct {
     size_t size;
 } NXRomFSFile;
 
+typedef struct {
+    const char *name;
+    size_t nameLength;
+    bool isDirectory;
+    size_t size;
+} NXRomFSDirectoryItem;
+
 /*
  * Opens the RomFS data-level image (not an NCA IVFC wrapper).
  * The view borrows the supplied image; the caller owns its lifetime.
@@ -39,5 +46,10 @@ bool NXEngineOpenRomFS(const uint8_t *image, size_t imageSize,
  */
 bool NXEngineRomFSGetFile(const NXRomFSView *view, const char *path,
                           NXRomFSFile *file);
+
+/* Returns one child of a directory; directories are listed before files. */
+bool NXEngineRomFSGetDirectoryItem(const NXRomFSView *view,
+                                   const char *path, size_t index,
+                                   NXRomFSDirectoryItem *item);
 
 #endif
