@@ -13,11 +13,12 @@ static bool alignUp(uint64_t value, uint64_t alignment, uint64_t *result) {
     return true;
 }
 
-bool NXEnginePrepareMainThread(NXEngine *engine,
-                               const uint8_t *npdmBytes, size_t npdmSize,
-                               const uint8_t *nsoBytes, size_t nsoSize,
-                               uint64_t loadBase,
-                               NXPreparedProcess *prepared) {
+bool NXEnginePrepareMainThreadWithRegistry(
+    NXEngine *engine,
+    const uint8_t *npdmBytes, size_t npdmSize,
+    const uint8_t *nsoBytes, size_t nsoSize,
+    uint64_t loadBase, NXNSORegistry *registry,
+    NXPreparedProcess *prepared) {
     if (!engine || !engine->initialized || !npdmBytes || !nsoBytes ||
         !prepared)
         return false;
@@ -37,7 +38,8 @@ bool NXEnginePrepareMainThread(NXEngine *engine,
 
     const uint64_t stackBase = NX_PROCESS_STACK_TOP - stackSize;
     NXLoadedNSO mainImage;
-    if (!NXEngineLoadNSO(engine, nsoBytes, nsoSize, loadBase, &mainImage))
+    if (!NXEngineLoadNSOWithRegistry(
+            engine, nsoBytes, nsoSize, loadBase, registry, &mainImage))
         return false;
 
     if (!NXEngineMapMemory(engine, stackBase, (size_t)stackSize,
@@ -62,4 +64,15 @@ bool NXEnginePrepareMainThread(NXEngine *engine,
     prepared->defaultCPU = npdm.defaultCPU;
     prepared->mainImage = mainImage;
     return true;
+}
+
+bool NXEnginePrepareMainThread(NXEngine *engine,
+                               const uint8_t *npdmBytes, size_t npdmSize,
+                               const uint8_t *nsoBytes, size_t nsoSize,
+                               uint64_t loadBase,
+                               NXPreparedProcess *prepared) {
+    return NXEnginePrepareMainThreadWithRegistry(
+        engine, npdmBytes, npdmSize, nsoBytes, nsoSize,
+        loadBase, NULL, prepared
+    );
 }
