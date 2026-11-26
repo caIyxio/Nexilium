@@ -28,7 +28,7 @@ int NXCPUSelfTest(void) {
     const uint32_t program[] = {
         UINT32_C(0xD2800540),
         UINT32_C(0x91002001),
-        UINT32_C(0xF100C422),
+        UINT32_C(0xF100C822),
         UINT32_C(0xF9000082),
         UINT32_C(0xF9400083)
     };
