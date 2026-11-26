@@ -63,5 +63,40 @@ int NXCPUSelfTest(void) {
                 engine.machine.pendingException.valid);
     }
     NXEngineDestroy(&engine);
-    return ok ? 1 : 0;
+    if (!ok) return 0;
+
+    /* Exercise the real Horizon dispatch path: SetHeapSize then GetSystemTick. */
+    NXEngine svcEngine;
+    if (!NXEngineInit(&svcEngine)) return 0;
+    const uint64_t svcCodeBase = 0x4000;
+    if (!NXEngineMapMemory(&svcEngine, svcCodeBase, 0x1000,
+                           NX_MEMORY_READ | NX_MEMORY_WRITE | NX_MEMORY_EXECUTE)) {
+        NXEngineDestroy(&svcEngine);
+        return 0;
+    }
+    const uint32_t svcProgram[] = {
+        UINT32_C(0xD4000021), /* SVC #0x01: SetHeapSize */
+        UINT32_C(0xD40003C1)  /* SVC #0x1E: GetSystemTick */
+    };
+    if (!NXEngineLoadBytes(&svcEngine, svcCodeBase, svcProgram, sizeof(svcProgram))) {
+        NXEngineDestroy(&svcEngine);
+        return 0;
+    }
+    svcEngine.cpu.x[1] = UINT64_C(0x200000);
+    svcEngine.cpu.pc = svcCodeBase;
+    NXCPUResult svcResult = NXEngineRun(&svcEngine, 2);
+    bool svcOK = svcResult == NX_CPU_STEP_LIMIT &&
+                 svcEngine.cpu.x[0] > 0 &&
+                 svcEngine.cpu.x[1] == UINT64_C(0x80000000) &&
+                 svcEngine.machine.heapSize == UINT64_C(0x200000) &&
+                 !svcEngine.machine.pendingException.valid;
+    if (!svcOK) {
+        fprintf(stderr, "Horizon SVC self-test failed: result=%d x0=%llx x1=%llx heap=%llx\\n",
+                (int)svcResult,
+                (unsigned long long)svcEngine.cpu.x[0],
+                (unsigned long long)svcEngine.cpu.x[1],
+                (unsigned long long)svcEngine.machine.heapSize);
+    }
+    NXEngineDestroy(&svcEngine);
+    return svcOK ? 1 : 0;
 }
