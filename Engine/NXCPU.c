@@ -1,6 +1,7 @@
 #include "NXCPU.h"
 #include "NXMachine.h"
 #include "NXNSO.h"
+#include "NXHorizon.h"
 #include "Arm64/mmu.h"
 #include <stdint.h>
 #include <string.h>
@@ -91,15 +92,47 @@ int NXCPUSelfTest(void) {
                  svcEngine.cpu.x[1] == UINT64_C(0x80000000) &&
                  svcEngine.machine.heapSize == UINT64_C(0x200000) &&
                  !svcEngine.machine.pendingException.valid;
-    if (!svcOK) {
-        fprintf(stderr, "Horizon SVC self-test failed: result=%d x0=%llx x1=%llx heap=%llx\\n",
-                (int)svcResult,
-                (unsigned long long)svcEngine.cpu.x[0],
-                (unsigned long long)svcEngine.cpu.x[1],
-                (unsigned long long)svcEngine.machine.heapSize);
+
+    /* Validate SVC port connection + a CMIF RegisterClient round-trip on sm:. */
+    const char smPortName[] = "sm:";
+    if (!NXEngineLoadBytes(&svcEngine, codeBase + 0x100, smPortName, sizeof(smPortName))) {
+        NXEngineDestroy(&svcEngine);
+        return 0;
+    }
+    uint32_t smHandle = 0;
+    uint32_t connectResult = NXHorizonConnectToNamedPort(
+        &svcEngine, codeBase + 0x100, &smHandle
+    );
+    uint8_t *hipc = (uint8_t *)mem_host_ptr(
+        &svcEngine.cpu, NX_TLS_BASE + NX_HIPC_TLS_OFFSET, 0x100,
+        ACC_READ | ACC_WRITE
+    );
+    bool ipcOK = hipc != NULL && connectResult == NX_RESULT_SUCCESS && smHandle != 0;
+    if (ipcOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4;
+        uint32_t header1 = 4;
+        memcpy(hipc, &header0, sizeof(header0));
+        memcpy(hipc + 4, &header1, sizeof(header1));
+        const uint32_t cmifRequest[] = {
+            UINT32_C(0x49434653), 0, 0, 0 /* SFCI RegisterClient */
+        };
+        memcpy(hipc + 0x10, cmifRequest, sizeof(cmifRequest));
+        uint32_t ipcResult = NXHorizonSendSyncRequest(&svcEngine, smHandle);
+        uint32_t responseMagic = 0, responseResult = UINT32_MAX;
+        memcpy(&responseMagic, hipc + 0x10, sizeof(responseMagic));
+        memcpy(&responseResult, hipc + 0x18, sizeof(responseResult));
+        ipcOK = ipcResult == NX_RESULT_SUCCESS &&
+                responseMagic == UINT32_C(0x4F434653) &&
+                responseResult == NX_RESULT_SUCCESS;
+    }
+    NXHorizonCloseHandle(&svcEngine, smHandle);
+    if (!svcOK || !ipcOK) {
+        fprintf(stderr, "Horizon self-test failed: svc=%d ipc=%d result=%d handle=%u\\n",
+                svcOK, ipcOK, (int)svcResult, smHandle);
     }
     NXEngineDestroy(&svcEngine);
-    if (!svcOK) return 0;
+    if (!svcOK || !ipcOK) return 0;
 
     /* Load a compressed NSO text segment (one MOVZ instruction) and execute it. */
     NXEngine nsoEngine;
