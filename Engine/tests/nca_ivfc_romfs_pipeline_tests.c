@@ -8,7 +8,9 @@
 
 #define NCA_IMAGE_SIZE 0x1000u
 #define NCA_SECTION_OFFSET 0xC00u
-#define IVFC_DATA_OFFSET 0x1D8u
+#define NCA_FS_HEADER_OFFSET 0x400u
+#define IVFC_SUPERBLOCK_OFFSET (NCA_FS_HEADER_OFFSET + 0x8u)
+#define IVFC_DATA_OFFSET 0xA0u
 #define ROMFS_SIZE 0xBBu
 
 static int failures = 0;
@@ -78,22 +80,19 @@ static void buildRomFS(uint8_t *image) {
     memcpy(image + 0xB8, "abc", 3);
 }
 
-static void buildIVFC(uint8_t *image) {
-    memset(image, 0, NCA_IMAGE_SIZE - NCA_SECTION_OFFSET);
-    put32(image + 0x00, UINT32_C(0x43465649));
-    put32(image + 0x04, UINT32_C(0x00020000));
-    put32(image + 0x08, 0x20);
-    put32(image + 0x0C, NX_IVFC_MAX_LEVELS);
+static void buildIVFCHeader(uint8_t *header) {
+    memset(header, 0, NX_IVFC_HEADER_SIZE);
+    put32(header + 0x00, UINT32_C(0x43465649));
+    put32(header + 0x04, UINT32_C(0x00020000));
+    put32(header + 0x08, 0x20);
+    put32(header + 0x0C, NX_IVFC_MAX_LEVELS);
 
     for (uint32_t i = 0; i < NX_IVFC_MAX_LEVELS; ++i) {
-        uint8_t *level = image + 0x10u + (size_t)i * 0x18u;
-        put64(level, i == 5 ? IVFC_DATA_OFFSET
-                            : 0x138u + (uint64_t)i * 0x20u);
+        uint8_t *level = header + 0x10u + (size_t)i * 0x18u;
+        put64(level, i == 5 ? IVFC_DATA_OFFSET : (uint64_t)i * 0x20u);
         put64(level + 8, i == 5 ? ROMFS_SIZE : 0x20u);
         put32(level + 16, 12);
     }
-
-    buildRomFS(image + IVFC_DATA_OFFSET);
 }
 
 static void buildDecryptedNCA(uint8_t *nca) {
@@ -104,12 +103,13 @@ static void buildDecryptedNCA(uint8_t *nca) {
     /* One plaintext RomFS section spanning media blocks 6 through 8. */
     put32(nca + 0x240, 6);
     put32(nca + 0x244, 8);
-    put16(nca + 0x400, 2);
-    nca[0x402] = 0; /* RomFS */
-    nca[0x403] = 3; /* Hierarchical integrity / IVFC */
-    nca[0x404] = 1; /* No section encryption */
+    put16(nca + NCA_FS_HEADER_OFFSET, 2);
+    nca[NCA_FS_HEADER_OFFSET + 2] = 0; /* RomFS */
+    nca[NCA_FS_HEADER_OFFSET + 3] = 3; /* Hierarchical integrity / IVFC */
+    nca[NCA_FS_HEADER_OFFSET + 4] = 1; /* No section encryption */
 
-    buildIVFC(nca + NCA_SECTION_OFFSET);
+    buildIVFCHeader(nca + IVFC_SUPERBLOCK_OFFSET);
+    buildRomFS(nca + NCA_SECTION_OFFSET + IVFC_DATA_OFFSET);
 }
 
 static void testDecryptedNCASectionToRomFSFile(void) {
@@ -129,14 +129,15 @@ static void testDecryptedNCASectionToRomFSFile(void) {
 
     const uint8_t *sectionBytes = nca + (size_t)section.byteOffset;
     NXIVFCView ivfc;
-    const uint8_t *dataLevel = NULL;
-    size_t dataLevelSize = 0;
-    CHECK(NXEngineOpenIVFC(sectionBytes, (size_t)section.byteSize, &ivfc));
-    CHECK(NXEngineIVFCGetDataLevel(&ivfc, &dataLevel, &dataLevelSize));
+    size_t dataOffset = 0;
+    size_t dataSize = 0;
+    CHECK(NXEngineOpenIVFC(nca + IVFC_SUPERBLOCK_OFFSET,
+                           NX_IVFC_HEADER_SIZE, section.byteSize, &ivfc));
+    CHECK(NXEngineIVFCGetDataLevel(&ivfc, &dataOffset, &dataSize));
 
     NXRomFSView romfs;
     NXRomFSFile file;
-    CHECK(NXEngineOpenRomFS(dataLevel, dataLevelSize, &romfs));
+    CHECK(NXEngineOpenRomFS(sectionBytes + dataOffset, dataSize, &romfs));
     CHECK(NXEngineRomFSGetFile(&romfs, "romfs/boot.bin", &file));
     CHECK(file.size == 3);
     CHECK(memcmp(file.bytes, "abc", 3) == 0);
@@ -146,10 +147,10 @@ int main(void) {
     testDecryptedNCASectionToRomFSFile();
 
     if (failures != 0) {
-        fprintf(stderr, "%d NCA-to-RomFS pipeline test(s) failed\\n", failures);
+        fprintf(stderr, "%d NCA-to-RomFS test(s) failed\\n", failures);
         return 1;
     }
 
-    puts("Decrypted NCA section -> IVFC -> RomFS file pipeline passed");
+    puts("Decrypted NCA FS header -> section -> IVFC -> RomFS pipeline passed");
     return 0;
 }
