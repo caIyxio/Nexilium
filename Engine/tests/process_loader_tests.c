@@ -83,6 +83,70 @@ static bool openProgramFiles(const uint8_t *pfs, size_t pfsSize,
            NXEnginePFS0GetFile(&view,"main",mainFile);
 }
 
+static void buildRelocatableNSO(uint8_t *nso, size_t size,
+                                  uint32_t relocationType) {
+    memset(nso,0,size);
+    memcpy(nso,"NSO0",4);
+    put32(nso+0x10,0x100);
+    put32(nso+0x14,0);
+    put32(nso+0x18,0x200);
+    uint8_t *text=nso+0x100;
+    put32(text+4,0x80); /* Relative offset to MOD0. */
+
+    put32(text+0x80,UINT32_C(0x30444F4D));
+    put32(text+0x84,0x40); /* .dynamic is MOD0 + 0x40. */
+
+    put64(text+0xC0,7);  put64(text+0xC8,0xE0); /* DT_RELA */
+    put64(text+0xD0,8);  put64(text+0xD8,24);   /* DT_RELASZ */
+    put64(text+0xE0,9);  put64(text+0xE8,24);   /* DT_RELAENT */
+    put64(text+0xF0,0);  put64(text+0xF8,0);    /* DT_NULL */
+
+    put64(text+0x100,0x150); /* r_offset */
+    put64(text+0x108,relocationType); /* symbol index 0, relocation type */
+    put64(text+0x110,0x1234); /* r_addend */
+}
+
+static void testMOD0RelativeRelocation(void) {
+    uint8_t nso[0x300];
+    buildRelocatableNSO(nso,sizeof(nso),1027u);
+
+    NXEngine engine;
+    CHECK(NXEngineInit(&engine));
+    NXLoadedNSO loaded;
+    const uint64_t loadBase=UINT64_C(0x7200000000);
+    CHECK(NXEngineLoadNSO(&engine,nso,sizeof(nso),loadBase,&loaded));
+    CHECK(loaded.hasModuleHeader);
+    CHECK(loaded.moduleHeaderAddress==loadBase+0x80);
+    CHECK(loaded.dynamicAddress==loadBase+0xC0);
+    CHECK(loaded.relativeRelocationCount==1);
+    CHECK(loaded.unsupportedRelocationCount==0);
+
+    const uint8_t *target=(const uint8_t *)mem_host_ptr(
+        &engine.cpu,loadBase+0x150,8,ACC_READ
+    );
+    uint64_t relocated=0;
+    if(target) memcpy(&relocated,target,sizeof(relocated));
+    CHECK(target!=NULL);
+    CHECK(relocated==loadBase+0x1234);
+    NXEngineDestroy(&engine);
+}
+
+static void testUnsupportedMOD0RelocationIsReported(void) {
+    uint8_t nso[0x300];
+    buildRelocatableNSO(nso,sizeof(nso),257u); /* R_AARCH64_ABS64 needs symbol lookup. */
+
+    NXEngine engine;
+    CHECK(NXEngineInit(&engine));
+    NXLoadedNSO loaded;
+    CHECK(NXEngineLoadNSO(
+        &engine,nso,sizeof(nso),UINT64_C(0x7300000000),&loaded
+    ));
+    CHECK(loaded.hasModuleHeader);
+    CHECK(loaded.relativeRelocationCount==0);
+    CHECK(loaded.unsupportedRelocationCount==1);
+    NXEngineDestroy(&engine);
+}
+
 static void testPrepareMainThread(void) {
     uint8_t npdm[0x400];
     uint8_t nso[0x105];
@@ -135,6 +199,8 @@ static void testRejectUnsupportedProcess(void) {
 }
 
 int main(void) {
+    testMOD0RelativeRelocation();
+    testUnsupportedMOD0RelocationIsReported();
     testPrepareMainThread();
     testRejectUnsupportedProcess();
     if (failures) {
