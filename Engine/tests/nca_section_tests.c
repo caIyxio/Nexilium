@@ -91,6 +91,11 @@ static void testMalformedLayouts(void) {
                                   &layout));
 
     buildHeader(header);
+    put32(header + 0x208, 11u * 0x200u);
+    CHECK(!NXNCAParseSectionTable(header, sizeof(header), 12u * 0x200u,
+                                  &layout));
+
+    buildHeader(header);
     put32(header + 0x244, 0); /* Only one half of this extent is set. */
     CHECK(!NXNCAParseSectionTable(header, sizeof(header), 12u * 0x200u,
                                   &layout));
