@@ -7,40 +7,45 @@ struct ConsoleHomeView: View {
     @State private var showingMiiCreator = false
     @State private var showingSettings = false
     @State private var settingsCategory: SettingsCategory = .graphics
-    @State private var selectedMenu: HomeMenuItem = .firmware
+    @State private var selectedMenu: HomeMenuItem = .mii
+    @AppStorage("miis.savedProfiles") private var savedProfilesData = "[]"
 
-    private let ink = Color(red: 0.29, green: 0.39, blue: 0.54)
+    private let background = Color(red: 0.925, green: 0.933, blue: 0.949)
+    private let ink = Color(red: 0.31, green: 0.40, blue: 0.54)
+
+    private var savedProfiles: [MiiProfile] {
+        (try? JSONDecoder().decode([MiiProfile].self, from: Data(savedProfilesData.utf8))) ?? []
+    }
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { proxy in
             ZStack {
-                Color(red: 0.91, green: 0.92, blue: 0.94).ignoresSafeArea()
+                background.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    header
-                        .padding(.horizontal, max(geometry.size.width * 0.045, 28))
-                        .padding(.top, 18)
+                    topBar
+                        .padding(.horizontal, proxy.size.width * 0.04)
+                        .padding(.top, max(proxy.safeAreaInsets.top, 12))
 
-                    Spacer(minLength: 20)
+                    Spacer(minLength: 12)
 
                     gamesArea
-                        .padding(.horizontal, max(geometry.size.width * 0.075, 42))
+                        .padding(.horizontal, proxy.size.width * 0.08)
+                        .frame(height: proxy.size.height * 0.39)
 
-                    Spacer(minLength: 24)
+                    Spacer(minLength: 12)
 
-                    bottomMenu
-                        .padding(.horizontal, max(geometry.size.width * 0.09, 48))
-                        .padding(.bottom, max(geometry.safeAreaInsets.bottom + 12, 24))
+                    bottomDock
+                        .padding(.horizontal, proxy.size.width * 0.16)
+                        .padding(.bottom, max(proxy.safeAreaInsets.bottom + 14, 22))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .statusBarHidden()
-        .onAppear {
-            LandscapeOrientationController().setLandscape()
-        }
+        .statusBarHidden(false)
+        .onAppear { LandscapeOrientationController().setLandscape() }
         .fullScreenCover(isPresented: $showingMiiCreator) {
             NavigationStack { MiiCreatorView() }
         }
@@ -49,90 +54,90 @@ struct ConsoleHomeView: View {
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .center) {
-            Text("NEXILIUM")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .tracking(5)
-                .foregroundStyle(ink)
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            ForEach(Array(savedProfiles.prefix(3))) { profile in
+                MiiAvatarPreview(
+                    face: profile.face, skin: profile.skin, hair: profile.hair,
+                    hairColor: profile.hairColor, eyes: profile.eyes, mouth: profile.mouth
+                )
+                .frame(width: 34, height: 38)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                .accessibilityLabel(profile.name)
+            }
             Spacer()
-            Text("HOME")
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .tracking(3)
-                .foregroundStyle(Color.gray.opacity(0.85))
+            // iOS owns the status indicators; Nexilium does not draw pretend Wi-Fi or battery values.
         }
-        .frame(height: 38)
+        .frame(height: 42)
     }
 
     private var gamesArea: some View {
         HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(Color.white.opacity(0.62))
-                .overlay {
-                    VStack(spacing: 9) {
-                        Image(systemName: "gamecontroller")
-                            .font(.system(size: 27, weight: .light))
-                            .foregroundStyle(ink.opacity(0.65))
-                        Text("No games installed")
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundStyle(Color.gray)
-                    }
-                }
-                .frame(width: min(geometryWidth * 0.22, 250), height: 145)
-                .overlay(RoundedRectangle(cornerRadius: 13).stroke(Color.white, lineWidth: 1.5))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Games")
+                    .font(.system(size: 25, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.primary.opacity(0.82))
+                Text("No games installed")
+                    .font(.system(size: 19, weight: .regular, design: .rounded))
+                    .foregroundStyle(Color.secondary)
+            }
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
-    private var bottomMenu: some View {
-        VStack(spacing: 10) {
+    private var bottomDock: some View {
+        VStack(spacing: 7) {
             HStack(spacing: 0) {
-                menuIcon(.mii, icon: "face.smiling", tint: Color(red: 0.28, green: 0.40, blue: 0.59))
-                menuIcon(.firmware, icon: "folder.badge.plus", tint: Color(red: 0.86, green: 0.56, blue: 0.20))
-                menuIcon(.controllers, icon: "gamecontroller", tint: Color(red: 0.28, green: 0.59, blue: 0.39))
-                menuIcon(.settings, icon: "gearshape", tint: Color(red: 0.38, green: 0.48, blue: 0.64))
-                if onExit != nil {
-                    menuIcon(.exit, icon: "power", tint: Color.gray)
-                }
+                dockButton(.mii, symbol: "face.smiling", tint: Color(red: 0.35, green: 0.43, blue: 0.57))
+                dockButton(.firmware, symbol: "folder.badge.plus", tint: Color(red: 0.91, green: 0.57, blue: 0.18))
+                dockButton(.controllers, symbol: "gamecontroller", tint: Color(red: 0.31, green: 0.62, blue: 0.39))
+                dockButton(.settings, symbol: "gearshape", tint: Color(red: 0.35, green: 0.48, blue: 0.68))
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 9)
-            .background(Color.white.opacity(0.72), in: Capsule())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color.white.opacity(0.78), in: Capsule())
             .overlay(Capsule().stroke(Color.white.opacity(0.95), lineWidth: 1.5))
 
             Text(selectedMenu.label)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(ink.opacity(0.9))
-                .frame(height: 16)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(ink)
+                .frame(height: 18)
         }
     }
 
-    private var geometryWidth: CGFloat {
-        max(UIScreen.main.bounds.width, UIScreen.main.bounds.height)
-    }
-
-    private func menuIcon(_ item: HomeMenuItem, icon: String, tint: Color) -> some View {
+    private func dockButton(_ item: HomeMenuItem, symbol: String, tint: Color) -> some View {
         Button {
             selectedMenu = item
             switch item {
-            case .mii: showingMiiCreator = true
-            case .firmware: onFirmware?()
+            case .mii:
+                showingMiiCreator = true
+            case .firmware:
+                onFirmware?()
             case .controllers:
                 settingsCategory = .controllers
                 showingSettings = true
             case .settings:
                 settingsCategory = .graphics
                 showingSettings = true
-            case .exit: onExit?()
             }
         } label: {
-            Image(systemName: icon)
-                .font(.system(size: 23, weight: .regular))
-                .foregroundStyle(tint)
-                .frame(maxWidth: .infinity)
-                .frame(height: 40)
-                .contentShape(Rectangle())
+            ZStack {
+                if selectedMenu == item {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 55, height: 55)
+                        .overlay(Circle().stroke(Color(red: 0.73, green: 0.79, blue: 0.87), lineWidth: 2))
+                        .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+                }
+                Image(systemName: symbol)
+                    .font(.system(size: 23, weight: .regular))
+                    .foregroundStyle(tint)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 55)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.label)
@@ -140,7 +145,7 @@ struct ConsoleHomeView: View {
 }
 
 private enum HomeMenuItem {
-    case mii, firmware, controllers, settings, exit
+    case mii, firmware, controllers, settings
 
     var label: String {
         switch self {
@@ -148,7 +153,6 @@ private enum HomeMenuItem {
         case .firmware: "Firmware"
         case .controllers: "Controllers"
         case .settings: "Settings"
-        case .exit: "Exit"
         }
     }
 }
