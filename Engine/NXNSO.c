@@ -320,7 +320,9 @@ static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
                            const NXLoadedNSO *image,
                            uint64_t tableAddress, uint64_t tableSize,
                            uint64_t symbolTableAddress,
-                           uint64_t symbolCount, NXLoadedNSO *stats) {
+                           uint64_t symbolCount,
+                           const NXNSORegistry *registry,
+                           NXLoadedNSO *stats) {
     if (tableSize == 0) return true;
     if (tableSize % 24u != 0 || tableSize > SIZE_MAX ||
         !addressInImage(image, tableAddress, (size_t)tableSize))
@@ -355,7 +357,7 @@ static bool applyRelaTable(NXEngine *engine, uint64_t loadBase,
         } else if (type == 257u || type == 258u) {
             if (!applyAArch64AbsoluteRelocation(
                     engine, loadBase, image, targetOffset, type, symbolIndex,
-                    addend, symbolTableAddress, symbolCount, stats))
+                    addend, symbolTableAddress, symbolCount, registry, stats))
                 return false;
         } else {
             ++stats->unsupportedRelocationCount;
@@ -368,7 +370,9 @@ static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
                           const NXLoadedNSO *image,
                           uint64_t tableAddress, uint64_t tableSize,
                           uint64_t symbolTableAddress,
-                          uint64_t symbolCount, NXLoadedNSO *stats) {
+                          uint64_t symbolCount,
+                          const NXNSORegistry *registry,
+                          NXLoadedNSO *stats) {
     if (tableSize == 0) return true;
     if (tableSize % 16u != 0 || tableSize > SIZE_MAX ||
         !addressInImage(image, tableAddress, (size_t)tableSize))
@@ -410,7 +414,7 @@ static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
             if (!applyAArch64AbsoluteRelocation(
                     engine, loadBase, image, targetOffset, type, symbolIndex,
                     (int64_t)implicitAddend, symbolTableAddress,
-                    symbolCount, stats))
+                    symbolCount, registry, stats))
                 return false;
         } else if (type == 258u) {
             uint8_t encoded[4];
