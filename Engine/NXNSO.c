@@ -427,7 +427,7 @@ static bool applyRelTable(NXEngine *engine, uint64_t loadBase,
             if (!applyAArch64AbsoluteRelocation(
                     engine, loadBase, image, targetOffset, type, symbolIndex,
                     (int64_t)implicitAddend, symbolTableAddress,
-                    symbolCount, stats))
+                    symbolCount, registry, stats))
                 return false;
         } else {
             ++stats->unsupportedRelocationCount;
