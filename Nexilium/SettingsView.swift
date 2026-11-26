@@ -19,44 +19,70 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsCategory.allCases, selection: $selection) { category in
-                HStack(spacing: 12) {
-                    Image(systemName: icon(for: category))
-                        .font(.system(size: 19, weight: .regular))
-                        .frame(width: 24)
-                    Text(category.rawValue)
-                }
-                .tag(category)
-            }
-            .navigationTitle("System Settings")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 23, weight: .light))
+                    Text("System Settings")
+                        .font(.system(size: 23, weight: .regular, design: .rounded))
+                    Spacer()
                     Button("Done") { dismiss() }
+                        .font(.system(size: 16, weight: .medium))
                 }
-            }
-        } detail: {
-            Group {
-                switch selection ?? .graphics {
-                case .graphics: GraphicsSettingsView()
-                case .controllers: ControllerSettingsView()
-                case .system: SystemSettingsView()
-                case .miscellaneous: MiscSettingsView()
-                case .about: AboutView()
-                }
-            }
-        }
-        .navigationSplitViewStyle(.balanced)
-    }
+                .padding(.horizontal, 28)
+                .frame(height: 58)
 
-    private func icon(for category: SettingsCategory) -> String {
-        switch category {
-        case .graphics: "display"
-        case .controllers: "gamecontroller"
-        case .system: "cpu"
-        case .miscellaneous: "slider.horizontal.3"
-        case .about: "info.circle"
+                Rectangle()
+                    .fill(Color.primary.opacity(0.14))
+                    .frame(height: 1)
+                    .padding(.horizontal, 28)
+
+                HStack(spacing: 0) {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(SettingsCategory.allCases) { category in
+                                Button {
+                                    selection = category
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Rectangle()
+                                            .fill((selection ?? .graphics) == category ? Color.blue : Color.clear)
+                                            .frame(width: 3)
+                                        Text(category.rawValue)
+                                            .font(.system(size: 16, weight: (selection ?? .graphics) == category ? .medium : .regular))
+                                            .foregroundStyle((selection ?? .graphics) == category ? Color.blue : Color.primary)
+                                        Spacer(minLength: 0)
+                                    }
+                                    .frame(height: 48)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
+                    .frame(width: proxy.size.width * 0.29)
+
+                    Rectangle()
+                        .fill(Color.primary.opacity(0.12))
+                        .frame(width: 1)
+
+                    Group {
+                        switch selection ?? .graphics {
+                        case .graphics: GraphicsSettingsView()
+                        case .controllers: ControllerSettingsView()
+                        case .system: SystemSettingsView()
+                        case .miscellaneous: MiscSettingsView()
+                        case .about: AboutView()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .background(Color(uiColor: .systemBackground))
         }
+        .preferredColorScheme(.light)
     }
 }
 
