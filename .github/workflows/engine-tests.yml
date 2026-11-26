@@ -81,3 +81,16 @@ jobs:
             -o nca-section-tests
       - name: Run NCA section table tests
         run: ./nca-section-tests
+
+      - name: Compile NCA-to-RomFS pipeline tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine \
+            Engine/NXNCA.c \
+            Engine/NXIVFC.c \
+            Engine/NXRomFS.c \
+            Engine/tests/nca_ivfc_romfs_pipeline_tests.c \
+            -o nca-romfs-pipeline-tests
+      - name: Run NCA-to-RomFS pipeline tests
+        run: ./nca-romfs-pipeline-tests
