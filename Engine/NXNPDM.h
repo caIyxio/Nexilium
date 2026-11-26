@@ -7,7 +7,7 @@
 
 #define NX_NPDM_HEADER_SIZE 0x80u
 #define NX_NPDM_ACID_HEADER_SIZE 0x240u
-#define NX_NPDM_ACI0_HEADER_SIZE 0x38u
+#define NX_NPDM_ACI0_HEADER_SIZE 0x40u
 
 typedef struct {
     const uint8_t *image;
