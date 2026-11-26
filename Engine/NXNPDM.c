@@ -43,8 +43,10 @@ bool NXEngineOpenNPDM(const uint8_t *image, size_t imageSize,
         acidSize < NX_NPDM_ACID_HEADER_SIZE ||
         !rangeFits(aci0Offset, aci0Size, imageSize) ||
         !rangeFits(acidOffset, acidSize, imageSize) ||
-        (aci0Offset < acidOffset + acidSize &&
-         acidOffset < aci0Offset + aci0Size))
+        aci0Offset < NX_NPDM_HEADER_SIZE ||
+        acidOffset < NX_NPDM_HEADER_SIZE ||
+        ((uint64_t)aci0Offset < (uint64_t)acidOffset + acidSize &&
+         (uint64_t)acidOffset < (uint64_t)aci0Offset + aci0Size))
         return false;
 
     const uint8_t *aci0 = image + aci0Offset;
