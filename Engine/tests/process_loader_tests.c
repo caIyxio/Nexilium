@@ -121,12 +121,10 @@ static void testMOD0RelativeRelocation(void) {
     CHECK(loaded.relativeRelocationCount==1);
     CHECK(loaded.unsupportedRelocationCount==0);
 
-    const uint8_t *target=(const uint8_t *)mem_host_ptr(
-        &engine.cpu,loadBase+0x150,8,ACC_READ
-    );
     uint64_t relocated=0;
-    if(target) memcpy(&relocated,target,sizeof(relocated));
-    CHECK(target!=NULL);
+    CHECK(NXEngineReadBytes(
+        &engine,loadBase+0x150,&relocated,sizeof(relocated)
+    ));
     CHECK(relocated==loadBase+0x1234);
     NXEngineDestroy(&engine);
 }
