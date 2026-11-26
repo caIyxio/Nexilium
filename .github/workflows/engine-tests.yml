@@ -27,5 +27,23 @@ jobs:
             Engine/Arm64/sysreg.c \
             Engine/tests/engine_smoke.c \
             -lm -latomic -o engine-smoke
-      - name: Run CPU and memory smoke test
+      - name: Run CPU interpreter smoke test
         run: ./engine-smoke
+      - name: Compile engine format and memory regression tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine -I Engine/Arm64 \
+            Engine/NXMachine.c \
+            Engine/NXHorizon.c \
+            Engine/NXNSO.c \
+            Engine/NXPFS0.c \
+            Engine/NXCPU.c \
+            Engine/Arm64/cpu.c \
+            Engine/Arm64/decode.c \
+            Engine/Arm64/exec_fpsimd.c \
+            Engine/Arm64/sysreg.c \
+            Engine/tests/engine_format_tests.c \
+            -lm -latomic -o engine-format-tests
+      - name: Run PFS0 and guest-memory regression tests
+        run: ./engine-format-tests
