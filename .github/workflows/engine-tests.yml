@@ -136,8 +136,6 @@ jobs:
             Engine/NXPFS0.c \
             Engine/NXNPDM.c \
             Engine/NXProcess.c \
-            Engine/NXVFS.c \
-            Engine/NXRomFS.c \
             Engine/Arm64/cpu.c \
             Engine/Arm64/decode.c \
             Engine/Arm64/exec_fpsimd.c \
