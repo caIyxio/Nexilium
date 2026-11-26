@@ -52,43 +52,53 @@ struct ConsoleHomeView: View {
     private var header: some View {
         HStack(alignment: .center) {
             Text("NEXILIUM")
-                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .font(.system(size: 18, weight: .bold, design: .rounded))
                 .tracking(5)
                 .foregroundStyle(ink)
             Spacer()
             Text("HOME")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .tracking(3)
                 .foregroundStyle(Color.gray.opacity(0.85))
         }
+        .frame(height: 38)
     }
 
     private var gamesArea: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Games")
-                .font(.system(size: 23, weight: .semibold, design: .rounded))
-                .foregroundStyle(Color.primary.opacity(0.82))
-            Text("No games installed")
-                .font(.system(size: 17, weight: .regular, design: .rounded))
-                .foregroundStyle(Color.gray)
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .fill(Color.white.opacity(0.62))
+                .overlay {
+                    VStack(spacing: 9) {
+                        Image(systemName: "gamecontroller")
+                            .font(.system(size: 27, weight: .light))
+                            .foregroundStyle(ink.opacity(0.65))
+                        Text("No games installed")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .foregroundStyle(Color.gray)
+                    }
+                }
+                .frame(width: min(geometryWidth * 0.22, 250), height: 145)
+                .overlay(RoundedRectangle(cornerRadius: 13).stroke(Color.white, lineWidth: 1.5))
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, minHeight: 150, alignment: .leading)
     }
 
     private var bottomMenu: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             HStack(spacing: 0) {
-                menuItem(.mii, icon: "face.smiling", tint: Color(red: 0.28, green: 0.40, blue: 0.59))
-                menuItem(.firmware, icon: "folder.badge.plus", tint: Color(red: 0.86, green: 0.56, blue: 0.20))
-                menuItem(.controllers, icon: "gamecontroller", tint: Color(red: 0.28, green: 0.59, blue: 0.39))
-                menuItem(.settings, icon: "gearshape", tint: Color(red: 0.38, green: 0.48, blue: 0.64))
+                menuIcon(.mii, icon: "face.smiling", tint: Color(red: 0.28, green: 0.40, blue: 0.59))
+                menuIcon(.firmware, icon: "folder.badge.plus", tint: Color(red: 0.86, green: 0.56, blue: 0.20))
+                menuIcon(.controllers, icon: "gamecontroller", tint: Color(red: 0.28, green: 0.59, blue: 0.39))
+                menuIcon(.settings, icon: "gearshape", tint: Color(red: 0.38, green: 0.48, blue: 0.64))
                 if onExit != nil {
-                    menuItem(.exit, icon: "power", tint: Color.gray)
+                    menuIcon(.exit, icon: "power", tint: Color.gray)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
-            .background(Color.white.opacity(0.68), in: Capsule())
+            .padding(.horizontal, 20)
+            .padding(.vertical, 9)
+            .background(Color.white.opacity(0.72), in: Capsule())
             .overlay(Capsule().stroke(Color.white.opacity(0.95), lineWidth: 1.5))
 
             Text(selectedMenu.label)
@@ -98,7 +108,11 @@ struct ConsoleHomeView: View {
         }
     }
 
-    private func menuItem(_ item: HomeMenuItem, icon: String, tint: Color) -> some View {
+    private var geometryWidth: CGFloat {
+        UIScreen.main.bounds.width
+    }
+
+    private func menuIcon(_ item: HomeMenuItem, icon: String, tint: Color) -> some View {
         Button {
             selectedMenu = item
             switch item {
@@ -113,20 +127,15 @@ struct ConsoleHomeView: View {
             case .exit: onExit?()
             }
         } label: {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 25, weight: .regular))
-                    .frame(width: 34, height: 34)
-                    .foregroundStyle(tint)
-                Text(item.label)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(ink)
-                    .lineLimit(1)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+            Image(systemName: icon)
+                .font(.system(size: 23, weight: .regular))
+                .foregroundStyle(tint)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(item.label)
     }
 }
 
