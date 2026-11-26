@@ -25,6 +25,6 @@ final class NexiliumAppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
-        .landscape
+        [.landscapeLeft, .landscapeRight]
     }
 }
