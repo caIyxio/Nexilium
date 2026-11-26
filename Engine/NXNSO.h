@@ -17,6 +17,7 @@ typedef struct {
     uint64_t moduleHeaderAddress;
     uint64_t dynamicAddress;
     uint32_t relativeRelocationCount;
+    uint32_t symbolRelocationCount;
     uint32_t unsupportedRelocationCount;
     bool hasModuleHeader;
 } NXLoadedNSO;
