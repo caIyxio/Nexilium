@@ -611,6 +611,17 @@ static bool applyMOD0RelativeRelocations(NXEngine *engine,
     image->symbolTableAddress = symbolTableAddress;
     image->symbolCount = symbolCount;
 
+    image->relaTableAddress = 0;
+    image->relaTableSize = relaSize;
+    image->relTableAddress = 0;
+    image->relTableSize = relSize;
+    if (relaSize != 0 &&
+        addOverflowU64(loadBase, relaOffset, &image->relaTableAddress))
+        return false;
+    if (relSize != 0 &&
+        addOverflowU64(loadBase, relOffset, &image->relTableAddress))
+        return false;
+
     if (relaSize != 0) {
         uint64_t tableAddress = 0;
         if (relaEntrySize != 24u ||
@@ -777,7 +788,8 @@ void NXNSORegistryInit(NXNSORegistry *registry) {
 
 bool NXNSORegistryRegister(NXNSORegistry *registry,
                            const NXLoadedNSO *module) {
-    if (!registry || !module || registry->count >= NX_NSO_MAX_MODULES)
+    if (!registry || !module || registry->pendingRelocationsResolved ||
+        registry->count >= NX_NSO_MAX_MODULES)
         return false;
     for (size_t i = 0; i < registry->count; ++i) {
         if (registry->modules[i].loadBase == module->loadBase)
@@ -793,4 +805,110 @@ bool NXEngineLoadNSO(NXEngine *engine, const uint8_t *fileBytes,
     return NXEngineLoadNSOWithRegistry(
         engine, fileBytes, fileSize, loadBase, NULL, loadedImage
     );
+}
+
+static bool moduleSymbolIsUndefined(NXEngine *engine,
+                                    const NXLoadedNSO *module,
+                                    uint32_t symbolIndex) {
+    if (!engine || !module || symbolIndex == 0 ||
+        symbolIndex >= module->symbolCount ||
+        module->symbolTableAddress == 0)
+        return false;
+    uint64_t address = 0;
+    uint8_t symbol[24];
+    if (addOverflowU64(module->symbolTableAddress,
+                       (uint64_t)symbolIndex * 24u, &address) ||
+        !NXEngineReadBytes(engine, address, symbol, sizeof(symbol)))
+        return false;
+    return readU16LE(symbol + 6) == 0;
+}
+
+static bool resolvePendingTable(NXEngine *engine,
+                                NXNSORegistry *registry,
+                                NXLoadedNSO *module,
+                                uint64_t tableAddress,
+                                uint64_t tableSize,
+                                bool isRela) {
+    const size_t entrySize = isRela ? 24u : 16u;
+    if (tableSize == 0) return true;
+    if (tableSize % entrySize != 0 ||
+        !addressInImage(module, tableAddress, (size_t)tableSize))
+        return false;
+
+    const uint64_t count = tableSize / entrySize;
+    for (uint64_t i = 0; i < count; ++i) {
+        uint64_t entryAddress = 0;
+        if (addOverflowU64(tableAddress, i * entrySize, &entryAddress))
+            return false;
+        uint8_t entry[24] = {0};
+        if (!NXEngineReadBytes(engine, entryAddress, entry, entrySize))
+            return false;
+
+        const uint64_t targetOffset = readU64LE(entry);
+        const uint64_t info = readU64LE(entry + 8);
+        const uint32_t type = (uint32_t)info;
+        const uint32_t symbolIndex = (uint32_t)(info >> 32);
+        if ((type != 257u && type != 258u) ||
+            !moduleSymbolIsUndefined(engine, module, symbolIndex))
+            continue;
+
+        int64_t addend = 0;
+        if (isRela) {
+            addend = (int64_t)readU64LE(entry + 16);
+        } else if (type == 257u) {
+            uint64_t targetAddress = 0, implicitAddend = 0;
+            if (addOverflowU64(module->loadBase, targetOffset, &targetAddress) ||
+                !readGuestU64(engine, targetAddress, &implicitAddend))
+                return false;
+            addend = (int64_t)implicitAddend;
+        } else {
+            uint64_t targetAddress = 0;
+            uint8_t encoded[4];
+            if (addOverflowU64(module->loadBase, targetOffset, &targetAddress) ||
+                !NXEngineReadBytes(engine, targetAddress, encoded, sizeof(encoded)))
+                return false;
+            const uint32_t implicitAddend =
+                (uint32_t)encoded[0] | ((uint32_t)encoded[1] << 8) |
+                ((uint32_t)encoded[2] << 16) | ((uint32_t)encoded[3] << 24);
+            addend = (int64_t)implicitAddend;
+        }
+
+        uint64_t resolvedAddress = 0;
+        if (!resolveDynamicSymbol(
+                engine, module->loadBase, module, registry,
+                module->symbolTableAddress, module->symbolCount,
+                symbolIndex, &resolvedAddress))
+            continue;
+
+        const uint32_t before = module->symbolRelocationCount;
+        if (!applyAArch64AbsoluteRelocation(
+                engine, module->loadBase, module, targetOffset, type,
+                symbolIndex, addend, module->symbolTableAddress,
+                module->symbolCount, registry, module))
+            return false;
+        if (module->symbolRelocationCount > before &&
+            module->unsupportedRelocationCount > 0)
+            --module->unsupportedRelocationCount;
+    }
+    return true;
+}
+
+bool NXNSORegistryResolvePending(NXEngine *engine,
+                                 NXNSORegistry *registry) {
+    if (!engine || !engine->initialized || !registry ||
+        registry->pendingRelocationsResolved)
+        return false;
+
+    for (size_t i = 0; i < registry->count; ++i) {
+        NXLoadedNSO *module = &registry->modules[i];
+        if (!resolvePendingTable(engine, registry, module,
+                                 module->relaTableAddress,
+                                 module->relaTableSize, true) ||
+            !resolvePendingTable(engine, registry, module,
+                                 module->relTableAddress,
+                                 module->relTableSize, false))
+            return false;
+    }
+    registry->pendingRelocationsResolved = true;
+    return true;
 }
