@@ -1,6 +1,18 @@
 import Foundation
 import CommonCrypto
 
+struct NCASectionInfo: Codable {
+    let index: Int
+    let startBlock: UInt32
+    let endBlock: UInt32
+    let byteOffset: UInt64
+    let byteSize: UInt64
+    let fileSystemType: UInt8
+    let hashType: UInt8
+    let encryptionType: UInt8
+    let metadataHashType: UInt8
+}
+
 struct NCAHeaderInfo: Codable {
     let magic: String
     let contentType: UInt8
@@ -9,6 +21,7 @@ struct NCAHeaderInfo: Codable {
     let contentSize: UInt64
     let programID: UInt64
     let rightsID: String
+    let sections: [NCASectionInfo]
 }
 
 enum NCAHeaderError: LocalizedError {
@@ -17,6 +30,7 @@ enum NCAHeaderError: LocalizedError {
     case decryptionFailed(Int32)
     case unsupportedMagic(String)
     case invalidContentSize
+    case invalidSectionTable
 
     var errorDescription: String? {
         switch self {
@@ -30,6 +44,8 @@ enum NCAHeaderError: LocalizedError {
             return "The decrypted NCA header has an unsupported signature: \(magic)."
         case .invalidContentSize:
             return "The NCA header reports an invalid content size."
+        case .invalidSectionTable:
+            return "The NCA header contains an invalid or unsupported section table."
         }
     }
 }
@@ -46,6 +62,8 @@ enum NCAHeaderDecoder {
         let file = try FileHandle(forReadingFrom: fileURL)
         defer { try? file.close() }
 
+        let fileSize = try file.seekToEnd()
+        try file.seek(toOffset: 0)
         let encrypted = try file.read(upToCount: encryptedHeaderSize) ?? Data()
         guard encrypted.count == encryptedHeaderSize else {
             throw NCAHeaderError.fileTooSmall
@@ -86,6 +104,42 @@ enum NCAHeaderDecoder {
             )
         }
 
+        var sectionLayout = NXNCASectionLayout()
+        let sectionTableValid = decrypted.withUnsafeBufferPointer { bytes in
+            guard let baseAddress = bytes.baseAddress else { return false }
+            return NXNCAParseSectionTable(
+                baseAddress,
+                bytes.count,
+                fileSize,
+                &sectionLayout
+            )
+        }
+        guard sectionTableValid else { throw NCAHeaderError.invalidSectionTable }
+
+        var sections: [NCASectionInfo] = []
+        for index in 0..<4 {
+            var nativeSection = NXNCASectionInfo()
+            guard NXNCAGetSectionInfo(
+                &sectionLayout,
+                UInt32(index),
+                &nativeSection
+            ) else {
+                throw NCAHeaderError.invalidSectionTable
+            }
+            guard nativeSection.present else { continue }
+            sections.append(NCASectionInfo(
+                index: Int(nativeSection.index),
+                startBlock: nativeSection.startBlock,
+                endBlock: nativeSection.endBlock,
+                byteOffset: nativeSection.byteOffset,
+                byteSize: nativeSection.byteSize,
+                fileSystemType: nativeSection.fsType,
+                hashType: nativeSection.hashType,
+                encryptionType: nativeSection.encryptionType,
+                metadataHashType: nativeSection.metadataHashType
+            ))
+        }
+
         let contentType = decrypted[0x205]
         let keyGeneration = decrypted[0x220]
         let keyAreaIndex = decrypted[0x207]
@@ -106,7 +160,8 @@ enum NCAHeaderDecoder {
             keyAreaEncryptionKeyIndex: keyAreaIndex,
             contentSize: contentSize,
             programID: programID,
-            rightsID: rightsID
+            rightsID: rightsID,
+            sections: sections
         )
     }
 
