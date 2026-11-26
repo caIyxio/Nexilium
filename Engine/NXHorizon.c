@@ -358,6 +358,9 @@ static bool readGuestPath(CPU *cpu, uint64_t address, uint64_t size,
     return true;
 }
 
+static void writeCmifResponse(uint8_t *buffer, uint32_t result,
+                              uint32_t movedHandle);
+
 static void writeCmifResponseData(uint8_t *buffer, uint32_t result,
                                   uint32_t movedHandle,
                                   const void *data, size_t dataSize) {
