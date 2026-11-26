@@ -5,6 +5,14 @@ import UIKit
 struct NexiliumApp: App {
     @UIApplicationDelegateAdaptor(NexiliumAppDelegate.self) private var appDelegate
 
+    init() {
+        guard NexiliumEngine.cpuCoreSelfTestPassed else {
+            NSLog("Nexilium: AArch64 CPU core self-test failed")
+            return
+        }
+        NSLog("Nexilium: AArch64 translation core initialized")
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
