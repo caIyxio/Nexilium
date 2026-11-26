@@ -392,3 +392,8 @@ bool NXEngineRomFSGetDirectoryItem(const NXRomFSView *view,
     }
     return false;
 }
+
+bool NXEngineRomFSIsDirectory(const NXRomFSView *view, const char *path) {
+    uint32_t directoryOffset = 0;
+    return findDirectoryPath(view, path, &directoryOffset);
+}
