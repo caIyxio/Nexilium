@@ -120,7 +120,7 @@ static void testRejectUnsupportedProcess(void) {
     buildNPDM(npdm,sizeof(npdm));
     buildNSO(nso,sizeof(nso));
     npdm[0x0F]=1; /* Unsupported secondary core. */
-    buildExeFSP0(pfs,sizeof(pfs),npdm,sizeof(npdm),nso,sizeof(nso));
+    buildExeFSPFS0(pfs,sizeof(pfs),npdm,sizeof(npdm),nso,sizeof(nso));
     CHECK(openProgramFiles(pfs,sizeof(pfs),&npdmFile,&mainFile));
 
     NXEngine engine;
