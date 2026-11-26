@@ -237,3 +237,18 @@ void NXEngineClearException(NXEngine *engine) {
 int NXEngineCanBootSystemMenu(void) {
     return 0;
 }
+
+u32 cpu_pack_spsr(CPU *cpu) {
+    u32 value = cpu->nzcv & (PS_N | PS_Z | PS_C | PS_V);
+    value |= cpu->daif & (PS_D | PS_A | PS_I | PS_F);
+    value |= ((u32)cpu->el << 2) | (cpu->sp_sel ? 1u : 0u);
+    return value;
+}
+
+void cpu_unpack_spsr(CPU *cpu, u32 value) {
+    cpu->nzcv = value & (PS_N | PS_Z | PS_C | PS_V);
+    cpu->daif = value & (PS_D | PS_A | PS_I | PS_F);
+    unsigned mode = value & 0xf;
+    cpu->el = (mode >> 2) & 3;
+    cpu->sp_sel = mode & 1u;
+}
