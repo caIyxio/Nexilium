@@ -17,10 +17,16 @@ typedef struct {
 
 /*
  * Loads an NSO main image and prepares its initial EL0 stack/register state.
- * This is not a complete Horizon process launch: dynamic relocations,
- * module dependencies, kernel process objects, and service permissions
- * still need to be implemented.
+ * The registry-aware variant can resolve imports from previously loaded
+ * NSO modules. This is still not a complete Horizon process launch.
  */
+bool NXEnginePrepareMainThreadWithRegistry(
+    NXEngine *engine,
+    const uint8_t *npdmBytes, size_t npdmSize,
+    const uint8_t *nsoBytes, size_t nsoSize,
+    uint64_t loadBase, NXNSORegistry *registry,
+    NXPreparedProcess *prepared);
+
 bool NXEnginePrepareMainThread(NXEngine *engine,
                                const uint8_t *npdmBytes, size_t npdmSize,
                                const uint8_t *nsoBytes, size_t nsoSize,
