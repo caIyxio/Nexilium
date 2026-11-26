@@ -102,29 +102,17 @@ private struct FirmwareInstallerView: View {
     @AppStorage("system.prodKeysFilename") private var prodKeysFilename = ""
     @AppStorage("system.titleKeysFilename") private var titleKeysFilename = ""
     @State private var importTarget: ImportTarget = .firmware
-    @State private var isImporterPresented = false
+    @State private var pickerMode: PickerMode?
     @State private var errorMessage: String?
 
     private enum ImportTarget {
-        case firmware
-        case prodKeys
-        case titleKeys
+        case firmware, prodKeys, titleKeys
 
         var destinationName: String {
             switch self {
             case .firmware: return "firmware-package.zip"
             case .prodKeys: return "prod.keys"
             case .titleKeys: return "title.keys"
-            }
-        }
-
-        var allowedContentTypes: [UTType] {
-            switch self {
-            case .firmware:
-                return [.zip, .folder]
-            case .prodKeys, .titleKeys:
-                let keysType = UTType(filenameExtension: "keys", conformingTo: .data) ?? .data
-                return [keysType, .folder]
             }
         }
 
@@ -137,40 +125,33 @@ private struct FirmwareInstallerView: View {
         }
     }
 
+    private enum PickerMode: String, Identifiable {
+        case file, folder
+        var id: String { rawValue }
+    }
+
     private var storageDirectory: URL {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        return documents.appendingPathComponent("Nexilium", isDirectory: true)
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Nexilium", isDirectory: true)
     }
 
     var body: some View {
         Form {
             Section("Nintendo Switch firmware") {
                 LabeledContent("Firmware package", value: firmwareImported ? "Imported: " + firmwareFilename : "Not imported")
-                Button {
-                    presentImporter(for: .firmware)
-                } label: {
-                    Label(firmwareImported ? "Replace firmware package" : "Choose firmware package", systemImage: "folder")
-                }
+                importButtons(for: .firmware)
             }
 
             Section("Keys") {
                 LabeledContent("prod.keys", value: prodKeysImported ? "Imported" : "Not imported")
-                Button {
-                    presentImporter(for: .prodKeys)
-                } label: {
-                    Label(prodKeysImported ? "Replace prod.keys" : "Choose prod.keys", systemImage: "key")
-                }
+                importButtons(for: .prodKeys)
 
                 LabeledContent("title.keys", value: titleKeysImported ? "Imported" : "Not imported")
-                Button {
-                    presentImporter(for: .titleKeys)
-                } label: {
-                    Label(titleKeysImported ? "Replace title.keys" : "Choose title.keys", systemImage: "key.fill")
-                }
+                importButtons(for: .titleKeys)
             }
 
             Section {
-                Text("Choose an individual file or a folder containing it. Firmware must be a .zip file; key files must be named prod.keys and title.keys. Nexilium currently stores the selected files locally; firmware parsing, validation and system emulation are not implemented yet.")
+                Text("Choose a file or a folder containing it. Firmware must be a .zip file; key files must be named prod.keys and title.keys. Nexilium currently stores selected files locally; firmware parsing and emulation are not implemented yet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -190,12 +171,18 @@ private struct FirmwareInstallerView: View {
                 Button("Done") { dismiss() }
             }
         }
-        .fileImporter(
-            isPresented: $isImporterPresented,
-            allowedContentTypes: importTarget.allowedContentTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            handleImport(result)
+        .sheet(item: $pickerMode) { mode in
+            NexiliumDocumentPicker(
+                contentTypes: mode == .file ? [.item] : [.folder],
+                asCopy: mode == .file,
+                onPick: { url in
+                    handleImport(url, isCopiedIntoApp: mode == .file)
+                },
+                onFailure: { message in
+                    errorMessage = message
+                }
+            )
+            .ignoresSafeArea()
         }
         .alert("Import failed", isPresented: Binding(
             get: { errorMessage != nil },
@@ -207,44 +194,76 @@ private struct FirmwareInstallerView: View {
         }
     }
 
-    private func presentImporter(for target: ImportTarget) {
-        importTarget = target
-        errorMessage = nil
-        isImporterPresented = true
+    @ViewBuilder
+    private func importButtons(for target: ImportTarget) -> some View {
+        Button {
+            importTarget = target
+            errorMessage = nil
+            pickerMode = .file
+        } label: {
+            Label("Choose file", systemImage: "doc")
+        }
+
+        Button {
+            importTarget = target
+            errorMessage = nil
+            pickerMode = .folder
+        } label: {
+            Label("Choose folder", systemImage: "folder")
+        }
     }
 
-    private func handleImport(_ result: Result<[URL], Error>) {
+    private func handleImport(_ selectedURL: URL, isCopiedIntoApp: Bool) {
         do {
-            guard let selectedURL = try result.get().first else { return }
-
-            let hasAccess = selectedURL.startAccessingSecurityScopedResource()
-            defer {
-                if hasAccess {
-                    selectedURL.stopAccessingSecurityScopedResource()
-                }
-            }
-
-            let sourceURL = try resolveFile(from: selectedURL)
             try FileManager.default.createDirectory(
                 at: storageDirectory,
                 withIntermediateDirectories: true
             )
 
-            let destination = storageDirectory.appendingPathComponent(importTarget.destinationName)
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
+            let sourceURL: URL
+            if isCopiedIntoApp {
+                sourceURL = try resolveFile(from: selectedURL)
+                try copyToAppStorage(sourceURL)
+            } else {
+                let hasAccess = selectedURL.startAccessingSecurityScopedResource()
+                guard hasAccess else {
+                    throw ImportError.noFolderAccess
+                }
+                defer { selectedURL.stopAccessingSecurityScopedResource() }
+
+                var coordinationError: NSError?
+                var importError: Error?
+                NSFileCoordinator().coordinate(
+                    readingItemAt: selectedURL,
+                    options: [],
+                    error: &coordinationError
+                ) { coordinatedURL in
+                    do {
+                        let match = try resolveFile(from: coordinatedURL)
+                        let childAccess = match.startAccessingSecurityScopedResource()
+                        defer {
+                            if childAccess { match.stopAccessingSecurityScopedResource() }
+                        }
+                        try copyToAppStorage(match)
+                    } catch {
+                        importError = error
+                    }
+                }
+
+                if let importError { throw importError }
+                if let coordinationError { throw coordinationError }
+                sourceURL = selectedURL
             }
-            try FileManager.default.copyItem(at: sourceURL, to: destination)
 
             switch importTarget {
             case .firmware:
-                firmwareFilename = sourceURL.lastPathComponent
+                firmwareFilename = isCopiedIntoApp ? sourceURL.lastPathComponent : "firmware-package.zip"
                 firmwareImported = true
             case .prodKeys:
-                prodKeysFilename = sourceURL.lastPathComponent
+                prodKeysFilename = "prod.keys"
                 prodKeysImported = true
             case .titleKeys:
-                titleKeysFilename = sourceURL.lastPathComponent
+                titleKeysFilename = "title.keys"
                 titleKeysImported = true
             }
             errorMessage = nil
@@ -253,10 +272,16 @@ private struct FirmwareInstallerView: View {
         }
     }
 
+    private func copyToAppStorage(_ sourceURL: URL) throws {
+        let destination = storageDirectory.appendingPathComponent(importTarget.destinationName)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.copyItem(at: sourceURL, to: destination)
+    }
+
     private func resolveFile(from selectedURL: URL) throws -> URL {
         let values = try selectedURL.resourceValues(forKeys: [.isDirectoryKey])
-        let candidates: [URL]
-
         if values.isDirectory == true {
             guard let enumerator = FileManager.default.enumerator(
                 at: selectedURL,
@@ -269,52 +294,90 @@ private struct FirmwareInstallerView: View {
             var matches: [URL] = []
             for case let fileURL as URL in enumerator {
                 let isDirectory = (try? fileURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                guard !isDirectory else { continue }
-
-                if matchesExpectedFile(fileURL) {
+                if !isDirectory && matchesExpectedFile(fileURL) {
                     matches.append(fileURL)
                 }
             }
-            candidates = matches
-        } else {
-            candidates = matchesExpectedFile(selectedURL) ? [selectedURL] : []
+            guard !matches.isEmpty else { throw ImportError.fileNotFound(importTarget.displayName) }
+            guard matches.count == 1, let match = matches.first else {
+                throw ImportError.multipleFiles(importTarget.displayName)
+            }
+            return match
         }
 
-        guard !candidates.isEmpty else {
+        guard matchesExpectedFile(selectedURL) else {
             throw ImportError.fileNotFound(importTarget.displayName)
         }
-        guard candidates.count == 1, let match = candidates.first else {
-            throw ImportError.multipleFiles(importTarget.displayName)
-        }
-        return match
+        return selectedURL
     }
 
     private func matchesExpectedFile(_ url: URL) -> Bool {
         switch importTarget {
-        case .firmware:
-            return url.pathExtension.lowercased() == "zip"
-        case .prodKeys:
-            return url.lastPathComponent.lowercased() == "prod.keys"
-        case .titleKeys:
-            return url.lastPathComponent.lowercased() == "title.keys"
+        case .firmware: return url.pathExtension.lowercased() == "zip"
+        case .prodKeys: return url.lastPathComponent.lowercased() == "prod.keys"
+        case .titleKeys: return url.lastPathComponent.lowercased() == "title.keys"
         }
     }
 
     private enum ImportError: LocalizedError {
-        case cannotReadFolder
-        case fileNotFound(String)
-        case multipleFiles(String)
+        case cannotReadFolder, noFolderAccess
+        case fileNotFound(String), multipleFiles(String)
 
         var errorDescription: String? {
             switch self {
             case .cannotReadFolder:
-                return "Nexilium couldn't read that folder. Try selecting the file directly."
+                return "Nexilium couldn't read that folder."
+            case .noFolderAccess:
+                return "iOS didn't grant access to that folder. Please choose it again."
             case .fileNotFound(let name):
                 return "No \(name) was found in the selected location."
             case .multipleFiles(let name):
-                return "More than one \(name) was found. Select the exact file instead of its parent folder."
+                return "More than one \(name) was found. Choose the exact file instead."
             }
         }
+    }
+}
+
+private struct NexiliumDocumentPicker: UIViewControllerRepresentable {
+    let contentTypes: [UTType]
+    let asCopy: Bool
+    let onPick: (URL) -> Void
+    let onFailure: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onPick: onPick, onFailure: onFailure)
+    }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(
+            forOpeningContentTypes: contentTypes,
+            asCopy: asCopy
+        )
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let onPick: (URL) -> Void
+        let onFailure: (String) -> Void
+
+        init(onPick: @escaping (URL) -> Void, onFailure: @escaping (String) -> Void) {
+            self.onPick = onPick
+            self.onFailure = onFailure
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            guard let url = urls.first else {
+                onFailure("No file was returned by the Files app.")
+                return
+            }
+            onPick(url)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
     }
 }
 
