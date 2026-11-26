@@ -94,3 +94,14 @@ jobs:
             -o nca-romfs-pipeline-tests
       - name: Run NCA-to-RomFS pipeline tests
         run: ./nca-romfs-pipeline-tests
+
+      - name: Compile NPDM metadata validation tests
+        run: |
+          clang -O2 -std=gnu11 -D_GNU_SOURCE \
+            -Wall -Wextra -Wno-unused-parameter \
+            -I Engine \
+            Engine/NXNPDM.c \
+            Engine/tests/npdm_tests.c \
+            -o npdm-tests
+      - name: Run NPDM metadata validation tests
+        run: ./npdm-tests
