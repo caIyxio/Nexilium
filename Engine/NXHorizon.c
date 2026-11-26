@@ -363,7 +363,6 @@ static bool hipcGetBufferDescriptor(const uint8_t *buffer,
     const size_t pointerCount = (header0 >> 16) & 0xFu;
     const size_t sendCount = (header0 >> 20) & 0xFu;
     const size_t receiveCount = (header0 >> 24) & 0xFu;
-    const size_t exchangeCount = (header0 >> 28) & 0xFu;
 
     size_t offset = 8;
     if ((header1 >> 31) != 0) {
@@ -403,7 +402,6 @@ static bool hipcGetBufferDescriptor(const uint8_t *buffer,
                    ((uint64_t)((data2 >> 28) & 0xFu) << 32) |
                    ((uint64_t)((data2 >> 2) & 0x7u) << 36);
     } else {
-        (void)exchangeOffset;
         return false;
     }
 
