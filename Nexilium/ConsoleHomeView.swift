@@ -1,5 +1,4 @@
 import SwiftUI
-import LucideSwift
 
 struct ConsoleHomeView: View {
     var onFirmware: (() -> Void)? = nil
@@ -48,12 +47,12 @@ struct ConsoleHomeView: View {
                     Spacer(minLength: 16)
 
                     HStack(spacing: 0) {
-                        menuButton("Mii Creator", icon: .faceSlightlySmiling) { showingMiiCreator = true }
-                        menuButton("Firmware", icon: .folderDown) { onFirmware?() }
-                        menuButton("Controllers", icon: .gamepad2) { settingsCategory = .controllers; showingSettings = true }
-                        menuButton("Settings", icon: .settings) { settingsCategory = .graphics; showingSettings = true }
+                        menuButton("Mii Creator", icon: "face.smiling") { showingMiiCreator = true }
+                        menuButton("Firmware", icon: "folder.badge.plus") { onFirmware?() }
+                        menuButton("Controllers", icon: "gamecontroller") { settingsCategory = .controllers; showingSettings = true }
+                        menuButton("Settings", icon: "gearshape") { settingsCategory = .graphics; showingSettings = true }
                         if let onExit {
-                            menuButton("Exit", icon: .power) { onExit() }
+                            menuButton("Exit", icon: "power") { onExit() }
                         }
                     }
                     .padding(.horizontal, 24)
@@ -75,10 +74,11 @@ struct ConsoleHomeView: View {
         }
     }
 
-    private func menuButton(_ title: String, icon: LucideIconName, action: @escaping () -> Void) -> some View {
+    private func menuButton(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 7) {
-                LucideIcon(icon)
+                Image(systemName: icon)
+                    .font(.system(size: 23, weight: .regular))
                     .frame(width: 23, height: 23)
                 Text(title)
                     .font(.system(size: 10, weight: .medium))
