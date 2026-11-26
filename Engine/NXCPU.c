@@ -182,14 +182,150 @@ int NXCPUSelfTest(void) {
                     responseResult == UINT32_C(0x0000F601);
     }
 
+    /* Exercise the read-only fsp-srv -> IFileSystem -> IFile path. */
+    uint8_t fsImage[0x36] = {0};
+    fsImage[0] = 'P'; fsImage[1] = 'F'; fsImage[2] = 'S'; fsImage[3] = '0';
+    fsImage[4] = 1;
+    fsImage[8] = 9;
+    fsImage[0x10 + 8] = 5;
+    memcpy(fsImage + 0x28, "test.bin", 9);
+    memcpy(fsImage + 0x31, "hello", 5);
+    bool fspOK = NXEngineMountPFS0(&svcEngine, "romfs",
+                                   fsImage, sizeof(fsImage));
+    uint32_t fspHandle = 0, fileSystemHandle = 0, fileHandle = 0;
+
+    if (fspOK && serviceOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4, header1 = 6;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 1, 0 };
+        memcpy(hipc + 0x10, request, sizeof(request));
+        memcpy(hipc + 0x20, "fsp-srv", 7);
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, smHandle);
+        uint32_t responseResult = UINT32_MAX;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&fspHandle, hipc + 0x0C, 4);
+        fspOK = result == 0 && responseResult == 0 && fspHandle != 0;
+    } else {
+        fspOK = false;
+    }
+
+    /* fsp-srv OpenDataFileSystemByCurrentProcess (cmd 2). */
+    if (fspOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4, header1 = 4;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 2, 0 };
+        memcpy(hipc + 0x10, request, sizeof(request));
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, fspHandle);
+        uint32_t responseResult = UINT32_MAX;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&fileSystemHandle, hipc + 0x0C, 4);
+        fspOK = result == 0 && responseResult == 0 && fileSystemHandle != 0;
+    }
+
+    const uint64_t guestPathAddress = svcCodeBase + 0x200;
+    const char guestPath[] = "test.bin";
+    fspOK = fspOK && NXEngineLoadBytes(
+        &svcEngine, guestPathAddress, guestPath, sizeof(guestPath)
+    );
+
+    /* IFileSystem GetEntryType (cmd 7), using a type-0x9 pointer buffer. */
+    if (fspOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4u | (1u << 16), header1 = 4;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        uint32_t pointer0 = (uint32_t)(sizeof(guestPath) << 16);
+        uint32_t pointer1 = (uint32_t)guestPathAddress;
+        memcpy(hipc + 8, &pointer0, 4);
+        memcpy(hipc + 12, &pointer1, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 7, 0 };
+        memcpy(hipc + 0x10, request, sizeof(request));
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, fileSystemHandle);
+        uint32_t responseResult = UINT32_MAX, entryType = UINT32_MAX;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&entryType, hipc + 0x20, 4);
+        fspOK = result == 0 && responseResult == 0 && entryType == 1;
+    }
+
+    /* IFileSystem OpenFile (cmd 8), then IFile GetSize (cmd 4). */
+    if (fspOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4u | (1u << 16), header1 = 5;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        uint32_t pointer0 = (uint32_t)(sizeof(guestPath) << 16);
+        uint32_t pointer1 = (uint32_t)guestPathAddress;
+        memcpy(hipc + 8, &pointer0, 4);
+        memcpy(hipc + 12, &pointer1, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 8, 0 };
+        memcpy(hipc + 0x10, request, sizeof(request));
+        uint32_t readMode = 1;
+        memcpy(hipc + 0x20, &readMode, 4);
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, fileSystemHandle);
+        uint32_t responseResult = UINT32_MAX;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&fileHandle, hipc + 0x0C, 4);
+        fspOK = result == 0 && responseResult == 0 && fileHandle != 0;
+    }
+    if (fspOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4, header1 = 4;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 4, 0 };
+        memcpy(hipc + 0x10, request, sizeof(request));
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, fileHandle);
+        uint32_t responseResult = UINT32_MAX;
+        uint64_t fileSize = 0;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&fileSize, hipc + 0x20, 8);
+        fspOK = result == 0 && responseResult == 0 && fileSize == 5;
+    }
+
+    /* IFile Read (cmd 0), using a type-0x6 output buffer. */
+    if (fspOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4u | (1u << 24), header1 = 8;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        uint32_t outputSize = 5;
+        uint32_t outputAddress = (uint32_t)(svcCodeBase + 0x300);
+        uint32_t outputFlags = 0;
+        memcpy(hipc + 8, &outputSize, 4);
+        memcpy(hipc + 12, &outputAddress, 4);
+        memcpy(hipc + 16, &outputFlags, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 0, 0 };
+        memcpy(hipc + 0x20, request, sizeof(request));
+        uint64_t fileOffset = 0, requestedSize = 5;
+        memcpy(hipc + 0x30, &fileOffset, 8);
+        memcpy(hipc + 0x38, &requestedSize, 8);
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, fileHandle);
+        uint32_t responseResult = UINT32_MAX;
+        uint64_t bytesRead = 0;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&bytesRead, hipc + 0x20, 8);
+        const char *readBack = (const char *)mem_host_ptr(
+            &svcEngine.cpu, svcCodeBase + 0x300, 5, ACC_READ
+        );
+        fspOK = result == 0 && responseResult == 0 && bytesRead == 5 &&
+                readBack && memcmp(readBack, "hello", 5) == 0;
+    }
+
+    NXHorizonCloseHandle(&svcEngine, fileHandle);
+    NXHorizonCloseHandle(&svcEngine, fileSystemHandle);
+    NXHorizonCloseHandle(&svcEngine, fspHandle);
     NXHorizonCloseHandle(&svcEngine, settingsHandle);
     NXHorizonCloseHandle(&svcEngine, smHandle);
-    if (!svcOK || !ipcOK || !serviceOK) {
-        fprintf(stderr, "Horizon self-test failed: svc=%d ipc=%d service=%d result=%d handle=%u\\n",
-                svcOK, ipcOK, serviceOK, (int)svcResult, smHandle);
+    if (!svcOK || !ipcOK || !serviceOK || !fspOK) {
+        fprintf(stderr, "Horizon self-test failed: svc=%d ipc=%d service=%d fsp=%d result=%d handle=%u\\n",
+                svcOK, ipcOK, serviceOK, fspOK, (int)svcResult, smHandle);
     }
     NXEngineDestroy(&svcEngine);
-    if (!svcOK || !ipcOK || !serviceOK) return 0;
+    if (!svcOK || !ipcOK || !serviceOK || !fspOK) return 0;
 
     /* Validate PFS0 directory bounds, names, and file data views. */
     uint8_t pfs[0x36] = {0};
