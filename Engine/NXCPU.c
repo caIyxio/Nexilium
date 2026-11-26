@@ -154,6 +154,15 @@ int NXCPUSelfTest(void) {
                  nsoRun == NX_CPU_STEP_LIMIT &&
                  loaded.entryPoint == UINT64_C(0x7100000000) &&
                  nsoEngine.cpu.x[0] == 42;
+    if (!nsoOK) {
+        fprintf(stderr,
+                "NSO self-test failed: loaded=%d result=%d pc=%llx x0=%llx entry=%llx imageSize=%llu\\n",
+                nsoLoaded, (int)nsoRun,
+                (unsigned long long)nsoEngine.cpu.pc,
+                (unsigned long long)nsoEngine.cpu.x[0],
+                (unsigned long long)(nsoLoaded ? loaded.entryPoint : 0),
+                (unsigned long long)(nsoLoaded ? loaded.imageSize : 0));
+    }
     NXEngineDestroy(&nsoEngine);
     return nsoOK ? 1 : 0;
 }
