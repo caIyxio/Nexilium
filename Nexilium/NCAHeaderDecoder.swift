@@ -158,6 +158,7 @@ enum NCAHeaderDecoder {
         }
 
         var output = [UInt8](repeating: 0, count: 16)
+        let outputCapacity = output.count
         var outputLength = 0
 
         let status: CCCryptorStatus = key.withUnsafeBytes { keyBytes in
@@ -173,7 +174,7 @@ enum NCAHeaderDecoder {
                         inputBytes.baseAddress,
                         input.count,
                         outputBytes.baseAddress,
-                        output.count,
+                        outputCapacity,
                         &outputLength
                     )
                 }
