@@ -163,6 +163,22 @@ int NXCPUSelfTest(void) {
                     responseResult == 0 && settingsHandle != 0;
     }
 
+    /* set:sys GetColorSetId (cmd 23) returns the default theme. */
+    if (serviceOK) {
+        memset(hipc, 0, 0x100);
+        uint32_t header0 = 4, header1 = 4;
+        memcpy(hipc, &header0, 4);
+        memcpy(hipc + 4, &header1, 4);
+        const uint32_t request[] = { UINT32_C(0x49434653), 0, 23, 0 };
+        memcpy(hipc + 0x10, request, sizeof(request));
+        uint32_t result = NXHorizonSendSyncRequest(&svcEngine, settingsHandle);
+        uint32_t responseResult = UINT32_MAX;
+        int32_t colorSetID = -1;
+        memcpy(&responseResult, hipc + 0x18, 4);
+        memcpy(&colorSetID, hipc + 0x20, 4);
+        serviceOK = result == 0 && responseResult == 0 && colorSetID == 0;
+    }
+
     /* Unknown service names must be rejected without creating a handle. */
     if (serviceOK) {
         memset(hipc, 0, 0x100);
