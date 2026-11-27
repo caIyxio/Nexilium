@@ -1,4 +1,8 @@
 # Contributors
 
-- **Calyxio** ([@caIyxio](https://github.com/caIyxio)): creator and maintainer
-- **Claude** ([Anthropic](https://www.anthropic.com/claude)): AI assistant; Switch-style home and settings UI, faster IPA build workflow
+## AI assistance
+
+- **OpenAI (ChatGPT)** — AI-assisted development, code contributions, debugging, and technical assistance.
+- **Anthropic (Claude)** — AI-assisted development, code contributions, debugging, and technical assistance.
+
+These AI systems provided assistance during development; project direction, decisions, and final integration remain with the human maintainer.
