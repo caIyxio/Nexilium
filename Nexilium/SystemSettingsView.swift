@@ -7,35 +7,23 @@ struct SystemSettingsView: View {
     @AppStorage("system.audioEnabled") private var audioEnabled = true
 
     var body: some View {
-        Form {
-            Section("Console") {
-                Picker("Region", selection: $region) {
-                    Text("Automatic").tag("Auto")
-                    Text("Japan").tag("Japan")
-                    Text("North America").tag("North America")
-                    Text("Europe").tag("Europe")
-                }
+        NXPage {
+            NXPickerRow(
+                title: "Region",
+                selection: $region,
+                options: ["Auto", "Japan", "North America", "Europe"]
+            ) { $0 == "Auto" ? "Automatic" : $0 }
 
-                Picker("Language", selection: $language) {
-                    Text("System Default").tag("System Default")
-                    Text("English").tag("English")
-                    Text("Español").tag("Español")
-                }
+            NXPickerRow(
+                title: "Language",
+                selection: $language,
+                options: ["System Default", "English", "Español"]
+            ) { $0 }
 
-                Toggle("Docked mode", isOn: $dockedMode)
-            }
+            NXToggleRow(title: "Docked Mode", isOn: $dockedMode)
+            NXToggleRow(title: "Audio", isOn: $audioEnabled)
 
-            Section("Audio") {
-                Toggle("Enable audio", isOn: $audioEnabled)
-            }
-
-            Section {
-                Text("These preferences are stored locally. System emulation settings will take effect as the emulator is developed.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            NXNote("These preferences are stored locally. System emulation settings will take effect as the emulator is developed.")
         }
-        .navigationTitle("System")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

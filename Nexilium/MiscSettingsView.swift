@@ -6,20 +6,12 @@ struct MiscSettingsView: View {
     @AppStorage("misc.showNotifications") private var showNotifications = true
 
     var body: some View {
-        Form {
-            Section("General") {
-                Toggle("Automatic save data", isOn: $autoSave)
-                Toggle("Confirm before clearing data", isOn: $confirmBeforeReset)
-                Toggle("In-app notifications", isOn: $showNotifications)
-            }
+        NXPage {
+            NXToggleRow(title: "Automatic Save Data", isOn: $autoSave)
+            NXToggleRow(title: "Confirm Before Clearing Data", isOn: $confirmBeforeReset)
+            NXToggleRow(title: "In-App Notifications", isOn: $showNotifications)
 
-            Section {
-                Text("Additional options will appear here as Nexilium gains more features.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            NXNote("Additional options will appear here as Nexilium gains more features.")
         }
-        .navigationTitle("Miscellaneous")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

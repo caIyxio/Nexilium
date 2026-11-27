@@ -19,6 +19,6 @@ struct MemoryEntitlementStatusView: View {
     }
 
     var body: some View {
-        LabeledContent("Increased memory entitlement", value: status)
+        NXInfoRow(title: "Increased Memory Entitlement", value: status)
     }
 }

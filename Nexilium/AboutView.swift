@@ -6,45 +6,36 @@ struct AboutView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 14) {
-                    Image("NexiliumIcon")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 54, height: 54)
-                        .clipShape(RoundedRectangle(cornerRadius: 13))
+        NXPage {
+            HStack(spacing: 14) {
+                Image("NexiliumIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 54, height: 54)
+                    .clipShape(RoundedRectangle(cornerRadius: 13))
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Nexilium")
-                            .font(.title3.weight(.semibold))
-                        Text("Nintendo Switch emulator for iOS")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Nexilium")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(NXTheme.text)
+                    Text("Nintendo Switch emulator for iOS")
+                        .font(.system(size: 14))
+                        .foregroundStyle(NXTheme.secondary)
                 }
-                .padding(.vertical, 6)
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+
+            NXInfoRow(title: "App Version", value: appVersion)
+            NXInfoRow(title: "Minimum iOS", value: "18.0")
+            NXInfoRow(title: "Developer", value: "Silicon Team")
+
+            if let url = URL(string: "https://github.com/caIyxio/Nexilium") {
+                NXLinkRow(title: "Source Code on GitHub", url: url)
             }
 
-            Section("Version") {
-                LabeledContent("App version", value: appVersion)
-                LabeledContent("Minimum iOS", value: "18.0")
-            }
-
-            Section("Project") {
-                LabeledContent("Developer", value: "Silicon Team")
-                Link(destination: URL(string: "https://github.com/caIyxio/Nexilium")!) {
-                    Label("Source code on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                }
-            }
-
-            Section {
-                Text("Nexilium is an independent open-source project. Nintendo and Nintendo Switch are trademarks of their respective owners.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
+            NXNote("Nexilium is an independent open-source project. Nintendo and Nintendo Switch are trademarks of their respective owners.")
         }
-        .navigationTitle("About")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
