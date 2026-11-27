@@ -10,32 +10,41 @@ struct ConsoleHomeView: View {
     @State private var selectedMenu: HomeMenuItem = .firmware
 
     var body: some View {
-        GeometryReader { proxy in
-            let tile = min(proxy.size.height * 0.36, 170)
+        ZStack {
+            GeometryReader { proxy in
+                let tile = min(proxy.size.height * 0.36, 170)
 
-            VStack(spacing: 0) {
-                topBar
-                    .padding(.horizontal, 32)
-                    .padding(.top, 14)
+                VStack(spacing: 0) {
+                    topBar
+                        .padding(.horizontal, 32)
+                        .padding(.top, 14)
 
-                Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                gamesArea(tile: tile, width: proxy.size.width)
+                    gamesArea(tile: tile, width: proxy.size.width)
 
-                Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                bottomDock
-                    .padding(.bottom, 44)
+                    bottomDock
+                        .padding(.bottom, 44)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .bottom) { bottomBar }
+                .background(NXTheme.background.ignoresSafeArea())
+                .scaleEffect(showingSettings ? 0.90 : 1)
+                .opacity(showingSettings ? 0 : 1)
+                .allowsHitTesting(!showingSettings)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .bottom) { bottomBar }
-            .background(NXTheme.background.ignoresSafeArea())
+
+            if showingSettings {
+                SettingsView(initialSelection: settingsCategory, onDismiss: closeSettings)
+                    .transition(.scale(scale: 0.88, anchor: .center).combined(with: .opacity))
+                    .zIndex(1)
+            }
         }
+        .animation(.spring(response: 0.48, dampingFraction: 0.88), value: showingSettings)
         .preferredColorScheme(.light)
         .onAppear { LandscapeOrientationController().setLandscape() }
-        .fullScreenCover(isPresented: $showingSettings) {
-            SettingsView(initialSelection: settingsCategory)
-        }
     }
 
     // MARK: Top bar
@@ -45,12 +54,7 @@ struct ConsoleHomeView: View {
             Button {
                 open(.system)
             } label: {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 42, height: 42)
-                    .background(Circle().fill(NXTheme.secondary.opacity(0.75)))
-                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                ProfileAvatarView(size: 42)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("System settings")
@@ -160,7 +164,15 @@ struct ConsoleHomeView: View {
 
     private func open(_ category: SettingsCategory) {
         settingsCategory = category
-        showingSettings = true
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.88)) {
+            showingSettings = true
+        }
+    }
+
+    private func closeSettings() {
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.88)) {
+            showingSettings = false
+        }
     }
 }
 
