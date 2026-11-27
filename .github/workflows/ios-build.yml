@@ -5,9 +5,9 @@ on:
     branches:
       - main
       - "ui/**"
-  pull_request:
   workflow_dispatch:
 
+# Build each branch push once. PRs use their source-branch build; avoid a duplicate full build for the resulting merge commit.
 # Keep only the newest build for a branch; avoid piling up stale IPA builds.
 concurrency:
   group: nexilium-ios-build-${{ github.ref }}
@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'push' || github.ref != 'refs/heads/main' || !startsWith(github.event.head_commit.message, 'Merge pull request')
     timeout-minutes: 40
     runs-on: macos-15
     steps:
