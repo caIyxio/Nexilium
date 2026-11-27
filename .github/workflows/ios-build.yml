@@ -76,15 +76,6 @@ jobs:
             -showBuildTimingSummary \
             build
 
-      # Save compiler intermediates even if the build is interrupted or fails.
-      # A unique key per commit lets the next run restore the newest partial/full state.
-      - name: Save Xcode derived data
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: build
-          key: ${{ steps.derived-data-cache.outputs.cache-primary-key }}
-
       - name: Package unsigned IPA
         run: |
           mkdir -p package/Payload
@@ -98,3 +89,13 @@ jobs:
           name: Nexilium-unsigned-IPA
           path: Nexilium-unsigned.ipa
           if-no-files-found: error
+
+      # Cache after publishing the IPA so a large DerivedData upload cannot delay delivery.
+      # Save compiler intermediates even if the build is interrupted or fails.
+      # A unique key per commit lets the next run restore the newest partial/full state.
+      - name: Save Xcode derived data
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: build
+          key: ${{ steps.derived-data-cache.outputs.cache-primary-key }}
