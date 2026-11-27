@@ -38,7 +38,7 @@ struct ConsoleHomeView: View {
 
             if showingSettings {
                 SettingsView(initialSelection: settingsCategory, onDismiss: closeSettings)
-                    .transition(.scale(scale: 0.88, anchor: .center).combined(with: .opacity))
+                    .transition(.scale(scale: 1.12, anchor: .center).combined(with: .opacity))
                     .zIndex(1)
             }
         }
