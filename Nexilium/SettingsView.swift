@@ -5,6 +5,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case graphics = "Graphics"
     case controllers = "Controllers"
     case system = "System"
+    case customization = "Customization"
     case miscellaneous = "Miscellaneous"
     case about = "About Nexilium"
     var id: String { rawValue }
@@ -13,9 +14,11 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selection: SettingsCategory
+    var onDismiss: (() -> Void)? = nil
 
-    init(initialSelection: SettingsCategory = .graphics) {
+    init(initialSelection: SettingsCategory = .graphics, onDismiss: (() -> Void)? = nil) {
         _selection = State(initialValue: initialSelection)
+        self.onDismiss = onDismiss
     }
 
     var body: some View {
@@ -106,11 +109,20 @@ struct SettingsView: View {
             case .graphics: GraphicsSettingsView()
             case .controllers: ControllerSettingsView()
             case .system: SystemSettingsView()
+            case .customization: CustomizationSettingsView()
             case .miscellaneous: MiscSettingsView()
             case .about: AboutView()
             }
         }
         .id(selection)
+    }
+
+    private func closeSettings() {
+        if let onDismiss {
+            onDismiss()
+        } else {
+            dismiss()
+        }
     }
 
     private var bottomBar: some View {
@@ -125,9 +137,9 @@ struct SettingsView: View {
                     .font(.system(size: 22))
                     .foregroundStyle(NXTheme.secondary)
                 Spacer()
-                Button { dismiss() } label: { NXButtonHint("B", "Back") }
+                Button { closeSettings() } label: { NXButtonHint("B", "Back") }
                     .buttonStyle(.plain)
-                Button { dismiss() } label: { NXButtonHint("A", "OK") }
+                Button { closeSettings() } label: { NXButtonHint("A", "OK") }
                     .buttonStyle(.plain)
             }
             .padding(.horizontal, 32)
